@@ -4,6 +4,9 @@
 Hi! Thanks for taking a look at `vault-ctrl-tool`. This is a quick tool that manages, authentication, 
 applying secrets, and refreshing leases for services.
 
+If you're curious on how to build this in your environment, see BUILDING.md. If you're integrating with
+Kubernetes, see KUBERNETES.md.
+
 # Tour Of vault-config.yml
 
 * [Vault Token](#vaultToken)
@@ -13,14 +16,7 @@ applying secrets, and refreshing leases for services.
 * [AWS](#aws)
 * [Databases](#databases)
 
-```yaml
-
-# Important! vault-ctrl-tool runs with "--output-prefix /etc/secrets", so all output files you see
-# below are actually inside /etc/secrets. The tool will build all necessary subdirectories.
-
-# Also Important! vault-ctrl-tool runs with "--input-prefix /etc/vault-config", so all template
-# files, and the  config file are looked for in /etc/vault-config.
-```
+These examples assume you're running with `--input-prefix /etc/vault-config --output-prefix /etc/secrets`.
 
 ### VaultToken
 
@@ -129,8 +125,9 @@ aws:
 
 ### Databases
 
+This is not yet supported.
+
 ```yaml
-# This does not work yet.
 databases:
   - connection:
       vault_role: mydb1
