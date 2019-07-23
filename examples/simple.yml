@@ -1,0 +1,16 @@
+# This will write your vault token to /tmp/v-c-t/simple/token.txt - useful if you have systems that already know how
+# to access Vault if only they had a token.
+
+vaultToken:
+  output: simple/token.txt
+  mode: 0666
+
+# SETUP
+#  1. Ensure VAULT_TOKEN and VAULT_ADDR are set correctly.
+
+# RUNNING
+# vault-ctrl-tool --init --output-prefix=/tmp/v-c-t --config=simple.yml
+
+# OUTPUT
+# cat /tmp/v-c-t/simple/token.txt
+

@@ -1,0 +1,5 @@
+After each example, there will be a file called "/tmp/vault-leases/vault-ctrl-tool.leases" created which tracked the
+work the tool did.
+
+You can delete the work the tool did by running: vault-ctrl-tool --cleanup
+

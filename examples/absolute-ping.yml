@@ -1,0 +1,24 @@
+# This will insert an example secret into an existing template file. Note that the "path" of the
+# secret starts with "/" so it's looked up at its absolute path.
+
+# Useful if you already have a configuration file that just needs some secrets populated into it.
+
+secrets:
+  - key: ping
+    path: /secret/ping
+    missingOk: false
+templates:
+  - input: template-ping/example.tpl
+    output: template-ping/absolute-example.txt
+    mode: 0666
+
+
+# SETUP
+#   1. Create a secret: vault write secret/ping ping=pong
+#   2. Ensure VAULT_TOKEN and VAULT_ADDR are set.
+
+# RUNNING
+#  vault-ctrl-tool --init --output-prefix=/tmp/v-c-t --config=template-ping.yml
+
+# OUTPUT
+#   cat /tmp/v-c-t/template-ping/absolute-example.txt
