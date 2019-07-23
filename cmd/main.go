@@ -210,7 +210,6 @@ func performSidecar() {
 				if err != nil {
 					jww.ERROR.Printf("error getting pod status: %s", err)
 				}
-
 				if status == "Error" {
 					jww.FATAL.Fatalf("primary container has errored, shutting down")
 				}
