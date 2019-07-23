@@ -40,7 +40,6 @@ var (
 	renewLeaseDuration  = kingpin.Flag("renew-lease-duration", "How long to request leases to be renewed for").Default("1h").Duration()
 
 	// Shared options
-	jsonOutput    = kingpin.Flag("json-log", "Output log in JSON format").Default("false").Bool()
 	debug         = kingpin.Flag("debug", "Log at debug level").Default("false").Bool()
 	vaultTokenArg = kingpin.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").String()
 
@@ -199,6 +198,7 @@ func performSidecar() {
 				jww.INFO.Printf("Renewal Heartbeat")
 				renewLeases(ctx, client)
 			case <-checkKubeAPITicks:
+				// @TODO
 				jww.INFO.Printf("Performing live check again Kubernetes API")
 				// call API to get status
 				var status string
@@ -210,6 +210,7 @@ func performSidecar() {
 				if err != nil {
 					jww.ERROR.Printf("error getting pod status: %s", err)
 				}
+
 				if status == "Error" {
 					jww.FATAL.Fatalf("primary container has errored, shutting down")
 				}
