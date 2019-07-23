@@ -24,3 +24,4 @@ copy-binary:
 
 vendor:
 	go mod vendor
+
