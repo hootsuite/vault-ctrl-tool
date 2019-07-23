@@ -1,0 +1,24 @@
+# This will insert an example secret into an existing template file.
+# Note the path is relative, so v-c-t prefixes it automatically with /secret/aplication-config/services/secret/
+
+# Useful if you already have a configuration file that just needs some secrets populated into it.
+
+secrets:
+  - key: ping
+    path: ping
+    missingOk: false
+templates:
+  - input: template-ping/relative-example.tpl
+    output: template-ping/relative-example.txt
+    mode: 0666
+
+
+# SETUP
+#   1. Create a secret: vault write secret/application-config/services/ping hello=world
+#   2. Ensure VAULT_TOKEN and VAULT_ADDR are set.
+
+# RUNNING
+#  vault-ctrl-tool --init --output-prefix=/tmp/v-c-t --config=relative-ping.yml
+
+# OUTPUT
+#   cat /tmp/v-c-t/template-ping/relative-example.txt

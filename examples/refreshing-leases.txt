@@ -1,0 +1,6 @@
+To keep any leases fresh, you can run:
+
+  vault-ctrl-tool --sidecar --output-prefix=/tmp/v-c-t  --renew-interval=1s --config=simple.yml
+
+This will refresh once a second. The default is 20 minutes which is likely sufficient for you.
+
