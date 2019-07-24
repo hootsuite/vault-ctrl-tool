@@ -1,23 +1,27 @@
-package main
+package kv
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/scrubber"
+	"github.com/hootsuite/vault-ctrl-tool/util"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func writeKVOutput(kvSecrets map[string]api.Secret) error {
+func WriteOutput(kvSecrets map[string]api.Secret) error {
 
-	secretsToFileMap := make(map[string][]SecretType)
+	secretsToFileMap := make(map[string][]cfg.SecretType)
 	fileToModeMap := make(map[string]os.FileMode)
 
-	for _, request := range config.Secrets {
+	for _, request := range cfg.Current.Secrets {
 
-		mode, err := stringToFileMode(request.Mode)
+		mode, err := util.StringToFileMode(request.Mode)
 
 		if err != nil {
 			return errwrap.Wrapf(fmt.Sprintf("Could not parse file mode %q for key %q: {{err}}",
@@ -38,13 +42,13 @@ func writeKVOutput(kvSecrets map[string]api.Secret) error {
 				}
 
 			} else {
-				makeDirsForFile(field.Output)
+				util.MakeDirsForFile(field.Output)
 				file, err := os.OpenFile(field.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 				if err != nil {
 					return errwrap.Wrapf(fmt.Sprintf("couldn't open file %q: {{err}}", field.Output), err)
 				}
 
-				addFileToScrub(field.Output)
+				scrubber.AddFile(field.Output)
 
 				jww.INFO.Printf("Writing field %q of secret with key %q to %q",
 					field.Name, request.Key, field.Output)
@@ -73,18 +77,18 @@ func writeKVOutput(kvSecrets map[string]api.Secret) error {
 	return dumpJSON(kvSecrets, secretsToFileMap, fileToModeMap)
 }
 
-func dumpJSON(kvSecrets map[string]api.Secret, secretsToFileMap map[string][]SecretType, fileToModeMap map[string]os.FileMode) error {
+func dumpJSON(kvSecrets map[string]api.Secret, secretsToFileMap map[string][]cfg.SecretType, fileToModeMap map[string]os.FileMode) error {
 	for filename, secrets := range secretsToFileMap {
 		jww.INFO.Printf("Creating JSON secrets file %q", filename)
 
-		makeDirsForFile(filename)
+		util.MakeDirsForFile(filename)
 		file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fileToModeMap[filename])
 
 		if err != nil {
 			return errwrap.Wrapf(fmt.Sprintf("Couldn't open file %q: {{err}}", filename), err)
 		}
 
-		addFileToScrub(filename)
+		scrubber.AddFile(filename)
 
 		data, err := collectSecrets(filename, secrets, kvSecrets)
 
@@ -105,7 +109,7 @@ func dumpJSON(kvSecrets map[string]api.Secret, secretsToFileMap map[string][]Sec
 	return nil
 }
 
-func collectSecrets(filename string, secrets []SecretType, kvSecrets map[string]api.Secret) (map[string]interface{}, error) {
+func collectSecrets(filename string, secrets []cfg.SecretType, kvSecrets map[string]api.Secret) (map[string]interface{}, error) {
 
 	data := make(map[string]interface{})
 
@@ -132,7 +136,5 @@ func collectSecrets(filename string, secrets []SecretType, kvSecrets map[string]
 			}
 		}
 	}
-
 	return data, nil
-
 }

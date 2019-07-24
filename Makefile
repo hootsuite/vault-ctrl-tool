@@ -13,10 +13,10 @@ test:
 	go test -v ./...
 
 darwin-binary:
-	GOOS=darwin GOARCH=amd64 go build -o bin/vault-ctrl-tool.darwin.amd64 cmd/*.go
+	GOOS=darwin GOARCH=amd64 go build -o bin/vault-ctrl-tool.darwin.amd64 .
 
 linux-binary:
-	GOOS=linux GOARCH=amd64 go build -o bin/vault-ctrl-tool.linux.amd64 cmd/*.go
+	GOOS=linux GOARCH=amd64 go build -o bin/vault-ctrl-tool.linux.amd64 .
 
 # Useful when doing development
 copy-binary:

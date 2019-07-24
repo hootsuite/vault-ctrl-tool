@@ -2,17 +2,25 @@ package main
 
 import (
 	"context"
+	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/hootsuite/vault-ctrl-tool/aws"
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/kv"
+	"github.com/hootsuite/vault-ctrl-tool/leases"
+	"github.com/hootsuite/vault-ctrl-tool/scrubber"
+	"github.com/hootsuite/vault-ctrl-tool/sshsigning"
+	"github.com/hootsuite/vault-ctrl-tool/util"
+	"golang.org/x/crypto/ssh"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
-	"golang.org/x/crypto/ssh"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -53,10 +61,10 @@ func renewLeases(ctx context.Context, client *api.Client) {
 	threshold := time.Now().Add(*renewInterval).Add(*safetyThreshold)
 	jww.DEBUG.Printf("Will renew all credentials expiring before %v", threshold)
 
-	jww.DEBUG.Printf("Auth token: expires? %v at %v", leases.AuthTokenLease.CanExpire, leases.AuthTokenLease.ExpiresAt)
+	jww.DEBUG.Printf("Auth token: expires? %v at %v", leases.Current.AuthTokenLease.CanExpire, leases.Current.AuthTokenLease.ExpiresAt)
 	// Does our authentication token expire soon?
-	if leases.AuthTokenLease.CanExpire {
-		if leases.AuthTokenLease.ExpiresAt.Before(threshold) {
+	if leases.Current.AuthTokenLease.CanExpire {
+		if leases.Current.AuthTokenLease.ExpiresAt.Before(threshold) {
 
 			err := renewSelf(ctx, client, *renewLeaseDuration)
 
@@ -66,29 +74,29 @@ func renewLeases(ctx context.Context, client *api.Client) {
 
 			// If the error is a permission denied, then it will never be renewed, so we're hooped.
 			if err == ErrPermissionDenied {
-				removeScrubFiles()
+				scrubber.RemoveFiles()
 				jww.FATAL.Fatalf("Authentication token could no longer be renewed.")
 			}
 		}
 	}
 
-	for _, awsLease := range leases.AWSCredentialLeases {
+	for _, awsLease := range leases.Current.AWSCredentialLeases {
 		jww.DEBUG.Printf("AWS credential for %q expires at: %v", awsLease.AWSCredential.OutputPath, awsLease.Expiry)
 
 		//If an AWS credential lease is going to expire, assume all of them are and rewrite all of them
 		//All of our AWS credentials should have the same expiry, as STS expires them after an hour and
 		//we wrote all of them at the same time in the init task
 		if awsLease.Expiry.Before(threshold) {
-			if err := writeAWSCredentials(client); err != nil {
+			if err := aws.WriteCredentials(client); err != nil {
 				jww.FATAL.Fatalf("Could not write AWS credentials to replace expiring credentials: %v", err)
 			}
 			break
 		}
 	}
 
-	for _, sshLease := range leases.SSHCertificates {
-		certificateFilename := filepath.Join(sshLease.OutputPath, SSHCertificate)
-		validBefore, err := readCertificateValidBefore(certificateFilename)
+	for _, sshLease := range leases.Current.SSHCertificates {
+		certificateFilename := filepath.Join(sshLease.OutputPath, sshsigning.SSHCertificate)
+		validBefore, err := sshsigning.ReadCertificateValidBefore(certificateFilename)
 
 		if err != nil {
 			jww.ERROR.Printf("could not get expiry date for SSH certificate %q: %v", certificateFilename, err)
@@ -102,7 +110,7 @@ func renewLeases(ctx context.Context, client *api.Client) {
 		// 2) fails because of another reason, but is still not expired (in which case we log, but keep going), or
 		// 3) fails because of another reason, but the ssh certificate is now invalid, in which case we exit.
 		if validBefore != uint64(ssh.CertTimeInfinity) && validBefore < uint64(threshold.Unix()) {
-			err := signSSHKey(client, sshLease.OutputPath, sshLease.VaultMount, sshLease.VaultRole)
+			err := sshsigning.SignKey(client, sshLease.OutputPath, sshLease.VaultMount, sshLease.VaultRole)
 
 			if errwrap.Contains(err, "Code: 403") {
 				jww.FATAL.Fatalf("Permission denied renewing SSH certificate %q.", certificateFilename)
@@ -118,14 +126,14 @@ func renewLeases(ctx context.Context, client *api.Client) {
 
 func performCleanup() {
 	jww.INFO.Print("Performing cleanup.")
-	readLeaseFile()
+	leases.ReadFile()
 
-	if len(leases.ManagedFiles) > 0 {
-		addFileToScrub(leases.ManagedFiles...)
+	if len(leases.Current.ManagedFiles) > 0 {
+		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	addFileToScrub(*leasesFile)
-	removeScrubFiles()
+	scrubber.AddFile(*leasesFile)
+	scrubber.RemoveFiles()
 }
 
 func emptySidecar() {
@@ -157,10 +165,10 @@ func emptySidecar() {
 
 func performSidecar() {
 
-	readLeaseFile()
+	leases.ReadFile()
 
-	if len(leases.ManagedFiles) > 0 {
-		addFileToScrub(leases.ManagedFiles...)
+	if len(leases.Current.ManagedFiles) > 0 {
+		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
 	client, _, err := authenticateToVault()
@@ -239,12 +247,12 @@ func performSidecar() {
 func performInitTasks() {
 
 	jww.DEBUG.Print("Performing init tasks.")
-	parseConfigFile()
+	cfg.ParseFile(configFile)
 
-	if isConfigEmpty() {
+	if cfg.IsEmpty() {
 		jww.INFO.Print("Configuration file is empty. Writing empty lease file and skipping authentication.")
-		writeLeaseFile()
-		disableExitScrubber()
+		leases.WriteFile()
+		scrubber.DisableExitScrubber()
 		return
 	}
 
@@ -263,7 +271,7 @@ func performInitTasks() {
 		jww.FATAL.Fatalf("Could not extract Vault Token: %v", err)
 	}
 
-	enrollAuthTokenInLease(secret)
+	leases.EnrollAuthToken(secret)
 
 	kvSecrets := readKVSecrets(client)
 
@@ -272,7 +280,7 @@ func performInitTasks() {
 		jww.FATAL.Fatalf("Could not write vault token: %v", err)
 	}
 
-	if err := writeKVOutput(kvSecrets); err != nil {
+	if err := kv.WriteOutput(kvSecrets); err != nil {
 		jww.FATAL.Fatalf("Could not write KV secrets: %v", err)
 	}
 
@@ -280,20 +288,20 @@ func performInitTasks() {
 		jww.FATAL.Fatalf("Could not write templates: %v", err)
 	}
 
-	if err := writeAWSCredentials(client); err != nil {
+	if err := aws.WriteCredentials(client); err != nil {
 		jww.FATAL.Fatalf("Could not write AWS credentials: %v", err)
 	}
 
-	if err := writeSSHKeys(client); err != nil {
+	if err := sshsigning.WriteKeys(client); err != nil {
 		jww.FATAL.Fatalf("Could not setup SSH certificate: %v", err)
 	}
 
-	enrollFilesInLease(scrubFiles)
+	scrubber.EnrollScrubFiles()
 
-	writeLeaseFile()
+	leases.WriteFile()
 
 	jww.DEBUG.Print("All initialization tasks completed.")
-	disableExitScrubber()
+	scrubber.DisableExitScrubber()
 }
 
 func checkArgs() {
@@ -315,11 +323,27 @@ func checkArgs() {
 	}
 }
 
+func setupLogging() {
+
+	jww.SetStdoutOutput(os.Stderr)
+
+	if *debug {
+		jww.SetStdoutThreshold(jww.LevelDebug)
+		jww.DEBUG.Print("Debug logging enabled.")
+	} else {
+		jww.SetStdoutThreshold(jww.LevelInfo)
+	}
+}
+
 func main() {
 
 	kingpin.Parse()
 
 	checkArgs()
+
+	util.SetPrefixes(inputPrefix, outputPrefix)
+	leases.SetLeasesFile(leasesFile)
+	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
 
 	setupLogging()
 
@@ -335,18 +359,18 @@ func main() {
 	// (above) takes care of exits by signal handling.
 	if *neverScrub {
 		jww.DEBUG.Print("User requested disabling file scrubber.")
-		disableExitScrubber()
+		scrubber.DisableExitScrubber()
 	}
 
-	defer runExitScrubber()
-	setupExitScrubber()
+	defer scrubber.RunExitScrubber()
+	scrubber.SetupExitScrubber()
 
 	if *initFlag {
 		performInitTasks()
 	} else if *sidecarFlag {
-		parseConfigFile()
+		cfg.ParseFile(configFile)
 
-		if isConfigEmpty() {
+		if cfg.IsEmpty() {
 			emptySidecar()
 		} else {
 			performSidecar()

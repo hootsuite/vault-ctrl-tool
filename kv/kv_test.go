@@ -1,7 +1,9 @@
-package main
+package kv
 
 import (
 	"testing"
+
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
 
 	"github.com/hashicorp/vault/api"
 	yaml "gopkg.in/yaml.v2"
@@ -27,7 +29,7 @@ secrets:
       output: /target/example.secrets
       mode: 0777
 `
-	var localConfig Config
+	var localConfig cfg.Config
 	yaml.Unmarshal([]byte(configString), &localConfig)
 
 	vaultSecrets := makeVaultKVSecrets()

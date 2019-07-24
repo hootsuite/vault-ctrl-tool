@@ -1,4 +1,4 @@
-package main
+package aws
 
 import (
 	"fmt"
@@ -6,18 +6,23 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/leases"
+	"github.com/hootsuite/vault-ctrl-tool/scrubber"
+	"github.com/hootsuite/vault-ctrl-tool/util"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func writeAWSCredentials(client *api.Client) error {
+func WriteCredentials(client *api.Client) error {
 
 	jww.DEBUG.Printf("Processing AWS credentials")
 	wipDirs := make(map[string]bool)
 
-	for _, awsConfig := range config.AWS {
-		if err := generateAWSFiles(client, awsConfig); err != nil {
+	for _, awsConfig := range cfg.Current.AWS {
+		if err := generateFiles(client, awsConfig); err != nil {
 			return err
 		}
 		wipDirs[awsConfig.OutputPath] = true
@@ -37,14 +42,14 @@ func writeAWSCredentials(client *api.Client) error {
 			if err != nil {
 				return err
 			}
-			addFileToScrub(targetFilename)
+			scrubber.AddFile(targetFilename)
 		}
 	}
 
 	return nil
 }
 
-func generateAWSFiles(client *api.Client, awsConfig AWSType) error {
+func generateFiles(client *api.Client, awsConfig cfg.AWSType) error {
 
 	path := filepath.Join(awsConfig.VaultMountPoint, "creds", awsConfig.VaultRole)
 
@@ -61,7 +66,7 @@ func generateAWSFiles(client *api.Client, awsConfig AWSType) error {
 	securityToken := result.Data["security_token"]
 
 	jww.DEBUG.Printf("Received AWS access key %q", accessKey)
-	mode, err := stringToFileMode(awsConfig.Mode)
+	mode, err := util.StringToFileMode(awsConfig.Mode)
 	if err != nil {
 		return errwrap.Wrapf(fmt.Sprintf("could not parse %q as a file mode: {{err}}", mode), err)
 	}
@@ -69,7 +74,7 @@ func generateAWSFiles(client *api.Client, awsConfig AWSType) error {
 	configFilename := filepath.Join(awsConfig.OutputPath, "config.wip")
 	credentialsFilename := filepath.Join(awsConfig.OutputPath, "credentials.wip")
 
-	makeDirsForFile(configFilename)
+	util.MakeDirsForFile(configFilename)
 
 	jww.DEBUG.Printf("Writing config file %q and credentials file %q", configFilename, credentialsFilename)
 	configFile, err := os.OpenFile(configFilename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, *mode)
@@ -79,7 +84,7 @@ func generateAWSFiles(client *api.Client, awsConfig AWSType) error {
 	}
 	defer configFile.Close()
 
-	addFileToScrub(configFilename)
+	scrubber.AddFile(configFilename)
 
 	credsFile, err := os.OpenFile(credentialsFilename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, *mode)
 
@@ -88,7 +93,7 @@ func generateAWSFiles(client *api.Client, awsConfig AWSType) error {
 	}
 	defer credsFile.Close()
 
-	addFileToScrub(credentialsFilename)
+	scrubber.AddFile(credentialsFilename)
 
 	header := strings.TrimSpace(awsConfig.Profile)
 
@@ -103,6 +108,6 @@ func generateAWSFiles(client *api.Client, awsConfig AWSType) error {
 		return errwrap.Wrapf(fmt.Sprintf("could not write contents to %q: {{err}}", configFilename), err)
 	}
 
-	enrollAWSInLease(result, awsConfig)
+	leases.EnrollAWS(result, awsConfig)
 	return nil
 }

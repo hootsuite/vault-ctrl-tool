@@ -1,7 +1,9 @@
-package main
+package cfg
 
 import (
 	"io/ioutil"
+
+	"github.com/hootsuite/vault-ctrl-tool/util"
 
 	jww "github.com/spf13/jwalterweatherman"
 	yaml "gopkg.in/yaml.v2"
@@ -67,14 +69,14 @@ type Config struct {
 }
 
 // Globally accessible configuration variable. General sanity check has been performed on it by prepareConfig.
-var config Config
+var Current Config
 
-func isConfigEmpty() bool {
-	if config.VaultToken.Output == "" &&
-		len(config.Templates) == 0 &&
-		len(config.AWS) == 0 &&
-		len(config.SSH) == 0 &&
-		len(config.Secrets) == 0 {
+func IsEmpty() bool {
+	if Current.VaultToken.Output == "" &&
+		len(Current.Templates) == 0 &&
+		len(Current.AWS) == 0 &&
+		len(Current.SSH) == 0 &&
+		len(Current.Secrets) == 0 {
 		return true
 	}
 
@@ -84,42 +86,42 @@ func isConfigEmpty() bool {
 // Validate the configuration and do any modifications that make the rest of the code easier.
 func prepareConfig(filename string) {
 
-	if isConfigEmpty() {
+	if IsEmpty() {
 		jww.WARN.Print("Configuration file lists nothing to output.")
 	}
 
 	keys := make(map[string]bool)
 	var happy = true
 
-	if config.VaultToken.Output != "" {
-		config.VaultToken.Output = absoluteOutputPath(config.VaultToken.Output)
+	if Current.VaultToken.Output != "" {
+		Current.VaultToken.Output = util.AbsoluteOutputPath(Current.VaultToken.Output)
 	}
 
 	// Go through the template config and clean it up..
 	var tidyTpls []TemplateType
 
-	for _, tpl := range config.Templates {
+	for _, tpl := range Current.Templates {
 		if tpl.Input == "" {
 			jww.WARN.Printf("There is a template stanza missing a input file in the configuration file ('imput').")
 			happy = false
 		} else {
-			tpl.Input = absoluteInputPath(tpl.Input)
+			tpl.Input = util.AbsoluteInputPath(tpl.Input)
 		}
 
 		if tpl.Output == "" {
 			jww.WARN.Printf("The template %q has no output file in the configuration file ('output').", tpl.Input)
 		} else {
-			tpl.Output = absoluteOutputPath(tpl.Output)
+			tpl.Output = util.AbsoluteOutputPath(tpl.Output)
 		}
 		tidyTpls = append(tidyTpls, tpl)
 	}
 
-	config.Templates = tidyTpls
+	Current.Templates = tidyTpls
 
 	// Go through the secrets config and clean it up...
 	var tidySecrets []SecretType
 
-	for _, secret := range config.Secrets {
+	for _, secret := range Current.Secrets {
 		if secret.Key == "" {
 			jww.WARN.Printf("There is a secret stanza missing a 'key' value in the configuration file.")
 			happy = false
@@ -135,7 +137,7 @@ func prepareConfig(filename string) {
 				jww.WARN.Printf("The field %q in %q is missing an 'output' value", field.Name, secret.Key)
 				happy = false
 			} else {
-				field.Output = absoluteOutputPath(field.Output)
+				field.Output = util.AbsoluteOutputPath(field.Output)
 			}
 			tidyFields = append(tidyFields, field)
 		}
@@ -143,7 +145,7 @@ func prepareConfig(filename string) {
 		secret.Fields = tidyFields
 
 		if secret.Output != "" {
-			secret.Output = absoluteOutputPath(secret.Output)
+			secret.Output = util.AbsoluteOutputPath(secret.Output)
 		}
 
 		if secret.Path == "" {
@@ -158,12 +160,12 @@ func prepareConfig(filename string) {
 		tidySecrets = append(tidySecrets, secret)
 	}
 
-	config.Secrets = tidySecrets
+	Current.Secrets = tidySecrets
 
 	// Go through the SSH config and clean it up..
 	var tidySSH []SSHType
 
-	for _, ssh := range config.SSH {
+	for _, ssh := range Current.SSH {
 		if ssh.VaultRole == "" {
 			jww.WARN.Printf("There is a SSH stanza missing its 'vaultRole'.")
 			happy = false
@@ -176,17 +178,17 @@ func prepareConfig(filename string) {
 			jww.WARN.Printf("The SSH stanza of \"%s/sign/%s\" is missing an 'outputPath'.", ssh.VaultMount, ssh.VaultRole)
 			happy = false
 		} else {
-			ssh.OutputPath = absoluteOutputPath(ssh.OutputPath)
+			ssh.OutputPath = util.AbsoluteOutputPath(ssh.OutputPath)
 		}
 		tidySSH = append(tidySSH, ssh)
 	}
 
-	config.SSH = tidySSH
+	Current.SSH = tidySSH
 
 	// Go through the AWS config and clean it up...
 	var tidyAWS []AWSType
 
-	for _, aws := range config.AWS {
+	for _, aws := range Current.AWS {
 		if aws.VaultRole == "" {
 			jww.WARN.Printf("There is an AWS stanza missing its 'vaultRole'.")
 			happy = false
@@ -208,12 +210,12 @@ func prepareConfig(filename string) {
 			jww.WARN.Printf("The AWS stanza for role %q is missing an output path.", aws.VaultRole)
 			happy = false
 		} else {
-			aws.OutputPath = absoluteOutputPath(aws.OutputPath)
+			aws.OutputPath = util.AbsoluteOutputPath(aws.OutputPath)
 		}
 		tidyAWS = append(tidyAWS, aws)
 	}
 
-	config.AWS = tidyAWS
+	Current.AWS = tidyAWS
 
 	// If we're not happy and we know it, clap^Wfail fatally..
 	if !happy {
@@ -221,13 +223,13 @@ func prepareConfig(filename string) {
 	}
 }
 
-func parseConfigFile() {
+func ParseFile(configFile *string) {
 
 	if configFile == nil || *configFile == "" {
 		jww.FATAL.Fatalf("A --config file is required to be specified.")
 	}
 
-	absConfigFile := absoluteInputPath(*configFile)
+	absConfigFile := util.AbsoluteInputPath(*configFile)
 	jww.DEBUG.Printf("Reading config file %q", absConfigFile)
 	yamlFile, err := ioutil.ReadFile(absConfigFile)
 
@@ -235,7 +237,7 @@ func parseConfigFile() {
 		jww.FATAL.Fatalf("Error reading config file %q: %v", absConfigFile, err)
 	}
 
-	err = yaml.Unmarshal(yamlFile, &config)
+	err = yaml.Unmarshal(yamlFile, &Current)
 
 	if err != nil {
 		jww.FATAL.Fatalf("error unmarshalling config file %q: %v", absConfigFile, err)

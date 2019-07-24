@@ -1,4 +1,4 @@
-package main
+package sshsigning
 
 import (
 	"crypto/rand"
@@ -10,6 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/leases"
+	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
@@ -26,7 +30,7 @@ const SSHPublicKey = "id_rsa.pub"
 // SSHCertificate is public key, signed by Vault.
 const SSHCertificate = "id_rsa-cert.pub"
 
-func generateSSHKeyPair(outputPath string) error {
+func generateKeyPair(outputPath string) error {
 
 	privateKeyFilename := filepath.Join(outputPath, SSHPrivateKey)
 	publicKeyFilename := filepath.Join(outputPath, SSHPublicKey)
@@ -49,7 +53,7 @@ func generateSSHKeyPair(outputPath string) error {
 	}
 	defer privateKeyFile.Close()
 
-	addFileToScrub(privateKeyFilename)
+	scrubber.AddFile(privateKeyFilename)
 
 	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
 	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
@@ -67,26 +71,26 @@ func generateSSHKeyPair(outputPath string) error {
 		return errwrap.Wrapf(fmt.Sprintf("could not write public SSH key %q: {{err}}", publicKeyFilename), err)
 
 	}
-	addFileToScrub(publicKeyFilename)
+	scrubber.AddFile(publicKeyFilename)
 	return nil
 
 }
 
-func writeSSHKeys(client *api.Client) error {
+func WriteKeys(client *api.Client) error {
 
-	for _, sshConfig := range config.SSH {
-		if err := generateSSHKeyPair(sshConfig.OutputPath); err != nil {
+	for _, sshConfig := range cfg.Current.SSH {
+		if err := generateKeyPair(sshConfig.OutputPath); err != nil {
 			return errwrap.Wrapf("failed to generate SSH keys: {{err}}", err)
 		}
-		if err := signSSHKey(client, sshConfig.OutputPath, sshConfig.VaultMount, sshConfig.VaultRole); err != nil {
+		if err := SignKey(client, sshConfig.OutputPath, sshConfig.VaultMount, sshConfig.VaultRole); err != nil {
 			return errwrap.Wrapf("failed to sign SSH key: {{err}}", err)
 		}
-		enrollSSHInLease(sshConfig)
+		leases.EnrollSSH(sshConfig)
 	}
 	return nil
 }
 
-func readCertificateValidBefore(certificate string) (uint64, error) {
+func ReadCertificateValidBefore(certificate string) (uint64, error) {
 	certificateBytes, err := ioutil.ReadFile(certificate)
 	if err != nil {
 		return 0, errwrap.Wrapf(fmt.Sprintf("could not read certificate file %q: {{err}}", certificate), err)
@@ -104,7 +108,7 @@ func readCertificateValidBefore(certificate string) (uint64, error) {
 	return sshCert.ValidBefore, nil
 }
 
-func signSSHKey(client *api.Client, outputPath string, vaultMount string, vaultRole string) error {
+func SignKey(client *api.Client, outputPath string, vaultMount string, vaultRole string) error {
 	jww.DEBUG.Printf("Signing keys in %q with certificate at %q and role %q", outputPath, vaultMount, vaultRole)
 	vaultSSH := client.SSHWithMountPoint(vaultMount)
 
@@ -137,6 +141,6 @@ func signSSHKey(client *api.Client, outputPath string, vaultMount string, vaultR
 	if err := ioutil.WriteFile(certificateFilename, []byte(signedKeyString), 0600); err != nil {
 		return errwrap.Wrapf("could not write certificate file: {{err}}", err)
 	}
-	addFileToScrub(certificateFilename)
+	scrubber.AddFile(certificateFilename)
 	return nil
 }

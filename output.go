@@ -4,13 +4,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/scrubber"
+	"github.com/hootsuite/vault-ctrl-tool/util"
+
 	"github.com/hashicorp/errwrap"
 	jww "github.com/spf13/jwalterweatherman"
 )
 
 func writeVaultToken(vaultToken string) error {
 
-	outputFilename := config.VaultToken.Output
+	outputFilename := cfg.Current.VaultToken.Output
 
 	if outputFilename == "" {
 		return nil
@@ -18,18 +22,18 @@ func writeVaultToken(vaultToken string) error {
 
 	jww.INFO.Printf("Writing Vault token to %q", outputFilename)
 
-	mode, err := stringToFileMode(config.VaultToken.Mode)
+	mode, err := util.StringToFileMode(cfg.Current.VaultToken.Mode)
 
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not parse file mode %q for %q: {{err}}", config.VaultToken.Mode, outputFilename), err)
+		return errwrap.Wrapf(fmt.Sprintf("could not parse file mode %q for %q: {{err}}", cfg.Current.VaultToken.Mode, outputFilename), err)
 	}
 
-	makeDirsForFile(outputFilename)
+	util.MakeDirsForFile(outputFilename)
 	file, err := os.OpenFile(outputFilename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 	if err != nil {
 		return errwrap.Wrapf(fmt.Sprintf("failed to create vault token file %q: {{err}}", outputFilename), err)
 	}
-	addFileToScrub(outputFilename)
+	scrubber.AddFile(outputFilename)
 
 	_, err = fmt.Fprintf(file, "%s\n", vaultToken)
 

@@ -1,9 +1,12 @@
-package main
+package leases
 
 import (
 	"encoding/json"
 	"io/ioutil"
 	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/util"
 
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
@@ -14,7 +17,7 @@ import (
 type Leases struct {
 	AuthTokenLease      LeasedAuthToken       `json:"auth"`
 	SecretLeases        []LeasedSecret        `json:"secrets"`
-	SSHCertificates     []SSHType             `json:"ssh"`
+	SSHCertificates     []cfg.SSHType         `json:"ssh"`
 	AWSCredentialLeases []LeasedAWSCredential `json:"aws"`
 	ManagedFiles        []string              `json:"files"`
 }
@@ -31,29 +34,33 @@ type LeasedSecret struct {
 }
 
 type LeasedAWSCredential struct {
-	AWSCredential AWSType   `json:"role"`
-	Expiry        time.Time `json:"expiry"`
+	AWSCredential cfg.AWSType `json:"role"`
+	Expiry        time.Time   `json:"expiry"`
 }
 
 // Contains all the runtime data needed for the tool to manage leases in sidecar mode.
-var leases Leases
+var Current Leases
 
-func enrollFilesInLease(files []string) {
-	leases.ManagedFiles = append(leases.ManagedFiles, files...)
+var leasesFile *string
+
+var ignoreNonRenewableAuth bool
+
+func EnrollFiles(files []string) {
+	Current.ManagedFiles = append(Current.ManagedFiles, files...)
 }
 
-func enrollSSHInLease(sshConfig SSHType) {
+func EnrollSSH(sshConfig cfg.SSHType) {
 	jww.DEBUG.Printf("Enrolling SSH keys in %q into lease.", sshConfig.OutputPath)
-	leases.SSHCertificates = append(leases.SSHCertificates, sshConfig)
+	Current.SSHCertificates = append(Current.SSHCertificates, sshConfig)
 }
 
-func enrollAWSInLease(awsCredential *api.Secret, awsConfig AWSType) {
+func EnrollAWS(awsCredential *api.Secret, awsConfig cfg.AWSType) {
 	jww.DEBUG.Printf("Enrolling AWS credentials for %s into lease.", awsConfig.VaultRole)
 	expiry := time.Now().Add(time.Second * time.Duration(awsCredential.LeaseDuration))
-	leases.AWSCredentialLeases = append(leases.AWSCredentialLeases, LeasedAWSCredential{AWSCredential: awsConfig, Expiry: expiry})
+	Current.AWSCredentialLeases = append(Current.AWSCredentialLeases, LeasedAWSCredential{AWSCredential: awsConfig, Expiry: expiry})
 }
 
-func enrollAuthTokenInLease(authToken *api.Secret) {
+func EnrollAuthToken(authToken *api.Secret) {
 
 	token, err := authToken.TokenID()
 	if err != nil {
@@ -72,7 +79,7 @@ func enrollAuthTokenInLease(authToken *api.Secret) {
 	jww.DEBUG.Printf("auth token renewable=%v ttl=%v", renewable, ttl)
 
 	if !renewable && ttl != 0 {
-		if *ignoreNonRenewableAuth {
+		if ignoreNonRenewableAuth {
 			jww.WARN.Printf("Ignoring that the authentication token has a TTL of %d but is not renewable.", ttl)
 			return
 		}
@@ -81,11 +88,11 @@ func enrollAuthTokenInLease(authToken *api.Secret) {
 
 	expiry := time.Now().Add(ttl)
 	expires := ttl != 0
-	leases.AuthTokenLease = LeasedAuthToken{Token: token, ExpiresAt: expiry, CanExpire: expires}
+	Current.AuthTokenLease = LeasedAuthToken{Token: token, ExpiresAt: expiry, CanExpire: expires}
 
 }
 
-func enrollSecretInLease(secret *api.Secret) {
+func EnrollSecret(secret *api.Secret) {
 
 	metadata, err := secret.TokenMetadata()
 	if err != nil {
@@ -94,12 +101,11 @@ func enrollSecretInLease(secret *api.Secret) {
 
 	jww.INFO.Printf("LeaseID: %v, LeaseDuration: %d, Renewable: %v, Metadata: %v", secret.LeaseID, secret.LeaseDuration, secret.Renewable,
 		metadata)
-
 }
 
-func writeLeaseFile() {
+func WriteFile() {
 	jww.DEBUG.Printf("Writing leases file %q", *leasesFile)
-	bytes, err := json.Marshal(leases)
+	bytes, err := json.Marshal(Current)
 
 	if err != nil {
 		jww.FATAL.Fatalf("Unable to serialize leases file: %v", err)
@@ -107,7 +113,7 @@ func writeLeaseFile() {
 
 	// Create interim directories to lease, just in case.
 
-	makeDirsForFile(*leasesFile)
+	util.MakeDirsForFile(*leasesFile)
 
 	err = ioutil.WriteFile(*leasesFile, bytes, 0600)
 	if err != nil {
@@ -115,15 +121,27 @@ func writeLeaseFile() {
 	}
 }
 
-func readLeaseFile() {
+func ReadFile() {
 	jww.INFO.Printf("Reading leases file %q", *leasesFile)
 	bytes, err := ioutil.ReadFile(*leasesFile)
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to read leases file %q: %v", *leasesFile, err)
 	}
 
-	err = json.Unmarshal(bytes, &leases)
+	err = json.Unmarshal(bytes, &Current)
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to unmarshal leases file %q: %v", *leasesFile, err)
 	}
+}
+
+func SetIgnoreNonRenewableAuth(ignore *bool) {
+	if ignore != nil {
+		ignoreNonRenewableAuth = *ignore
+	} else {
+		ignoreNonRenewableAuth = false
+	}
+}
+
+func SetLeasesFile(filename *string) {
+	leasesFile = filename
 }

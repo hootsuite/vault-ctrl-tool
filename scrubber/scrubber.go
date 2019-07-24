@@ -1,9 +1,11 @@
-package main
+package scrubber
 
 import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/hootsuite/vault-ctrl-tool/leases"
 
 	jww "github.com/spf13/jwalterweatherman"
 )
@@ -15,23 +17,27 @@ var runScrubber = make(chan bool, 2)
 
 var scrubFiles []string
 
-func addFileToScrub(filename ...string) {
+func AddFile(filename ...string) {
 	scrubFiles = append(scrubFiles, filename...)
 }
 
-func setupExitScrubber() {
+func SetupExitScrubber() {
 
 	jww.DEBUG.Printf("Setting up exit scrubber.")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigs
-		runExitScrubber()
+		RunExitScrubber()
 		os.Exit(0)
 	}()
 }
 
-func runExitScrubber() {
+func EnrollScrubFiles() {
+	leases.EnrollFiles(scrubFiles)
+}
+
+func RunExitScrubber() {
 
 	jww.DEBUG.Print("Exit Scrubber called, checking if it should run.")
 	select {
@@ -44,10 +50,10 @@ func runExitScrubber() {
 		// needed to make this async
 	}
 
-	removeScrubFiles()
+	RemoveFiles()
 }
 
-func removeScrubFiles() {
+func RemoveFiles() {
 	if len(scrubFiles) > 0 {
 		jww.INFO.Print("Removing files created with secrets.")
 		for _, filename := range scrubFiles {
@@ -61,7 +67,7 @@ func removeScrubFiles() {
 		jww.DEBUG.Print("No files created to scrub.")
 	}
 }
-func disableExitScrubber() {
+func DisableExitScrubber() {
 	jww.DEBUG.Print("Disabling file scrubber")
 	runScrubber <- false
 }

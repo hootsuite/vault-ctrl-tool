@@ -5,6 +5,10 @@ import (
 	"os"
 	"text/template"
 
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/scrubber"
+	"github.com/hootsuite/vault-ctrl-tool/util"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
@@ -14,9 +18,9 @@ var templates = make(map[string]*template.Template)
 
 func ingestTemplates() error {
 
-	jww.DEBUG.Printf("Templates to ingest: %d", len(config.Templates))
+	jww.DEBUG.Printf("Templates to ingest: %d", len(cfg.Current.Templates))
 
-	for _, tpl := range config.Templates {
+	for _, tpl := range cfg.Current.Templates {
 
 		jww.DEBUG.Printf("Ingesting template: %q", tpl.Input)
 
@@ -40,25 +44,26 @@ func writeTemplates(kvSecrets map[string]api.Secret) error {
 		}
 	}
 
-	for _, tpl := range config.Templates {
+	for _, tpl := range cfg.Current.Templates {
 
 		modeString := tpl.Mode
 
 		var mode *os.FileMode
 
-		mode, err := stringToFileMode(modeString)
+		mode, err := util.StringToFileMode(modeString)
 		if err != nil {
 			return errwrap.Wrapf(fmt.Sprintf("could not parse file mode %q for %q: {{err}}", modeString, tpl.Output), err)
 		}
 
 		jww.INFO.Printf("Resolving template %q into %q", tpl.Input, tpl.Output)
 
-		makeDirsForFile(tpl.Output)
+		util.MakeDirsForFile(tpl.Output)
 		file, err := os.OpenFile(tpl.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 		if err != nil {
 			return err
 		}
-		addFileToScrub(tpl.Output)
+
+		scrubber.AddFile(tpl.Output)
 
 		jww.DEBUG.Printf("Executing template %q", tpl.Output)
 
@@ -67,6 +72,7 @@ func writeTemplates(kvSecrets map[string]api.Secret) error {
 		if err != nil {
 			return errwrap.Wrapf(fmt.Sprintf("failed to write template %q: {{err}}", tpl.Output), err)
 		}
+
 		file.Close()
 
 		jww.DEBUG.Printf("Done executing template %q", tpl.Output)

@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
+	"github.com/hootsuite/vault-ctrl-tool/leases"
+
 	"github.com/cenkalti/backoff"
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
@@ -50,7 +53,7 @@ func renewSelf(ctx context.Context, client *api.Client, duration time.Duration) 
 		}
 
 		jww.INFO.Print("Vault authentication token renewed.")
-		enrollAuthTokenInLease(secret)
+		leases.EnrollAuthToken(secret)
 
 		return nil
 	}
@@ -66,8 +69,8 @@ func performKubernetesAuth() (*api.Client, *api.Secret, error) {
 		Role string `json:"role"`
 	}
 
-	cfg := api.DefaultConfig()
-	client, err := api.NewClient(cfg)
+	vaultCfg := api.DefaultConfig()
+	client, err := api.NewClient(vaultCfg)
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to create vault client to %q: %v", client.Address(), err)
 	}
@@ -78,7 +81,7 @@ func performKubernetesAuth() (*api.Client, *api.Secret, error) {
 		return nil, nil, err
 	}
 
-	jww.INFO.Printf("Authenticating to %q as role %q against %q", *k8sLoginPath, *k8sAuthRole, cfg.Address)
+	jww.INFO.Printf("Authenticating to %q as role %q against %q", *k8sLoginPath, *k8sAuthRole, vaultCfg.Address)
 
 	req := client.NewRequest("POST", fmt.Sprintf("/v1/auth/%s/login", *k8sLoginPath))
 	err = req.SetJSONBody(&login{JWT: string(tokenBytes), Role: *k8sAuthRole})
@@ -111,8 +114,8 @@ func performKubernetesAuth() (*api.Client, *api.Secret, error) {
 	return client, &secret, nil
 }
 
-func performTokenAuth(cfg *api.Config, vaultToken string) (*api.Client, *api.Secret, error) {
-	client, err := api.NewClient(cfg)
+func performTokenAuth(vaultCfg *api.Config, vaultToken string) (*api.Client, *api.Secret, error) {
+	client, err := api.NewClient(vaultCfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -125,7 +128,7 @@ func performTokenAuth(cfg *api.Config, vaultToken string) (*api.Client, *api.Sec
 		return nil, nil, err
 	}
 
-	jww.DEBUG.Printf("Token authentication to %q succeeded.", cfg.Address)
+	jww.DEBUG.Printf("Token authentication to %q succeeded.", vaultCfg.Address)
 	return client, secret, nil
 }
 
@@ -137,17 +140,17 @@ func performTokenAuth(cfg *api.Config, vaultToken string) (*api.Client, *api.Sec
 func authenticateToVault() (*api.Client, *api.Secret, error) {
 
 	// If there is a leases token, use it.
-	if leases.AuthTokenLease.Token != "" {
+	if leases.Current.AuthTokenLease.Token != "" {
 
 		// DefaultConfig will digest VAULT_ environment variables
-		cfg := api.DefaultConfig()
+		vaultCfg := api.DefaultConfig()
 
-		jww.INFO.Printf("Logging into Vault server %q with token from lease", cfg.Address)
-		client, secret, err := performTokenAuth(cfg, leases.AuthTokenLease.Token)
+		jww.INFO.Printf("Logging into Vault server %q with token from lease", vaultCfg.Address)
+		client, secret, err := performTokenAuth(vaultCfg, leases.Current.AuthTokenLease.Token)
 
 		if err != nil {
 			jww.FATAL.Fatalf("Failed to authenticate to vault server %q with token in lease file. Leases will not be renewed. Error: %v",
-				cfg.Address, err)
+				vaultCfg.Address, err)
 		}
 
 		return client, secret, nil
@@ -158,13 +161,13 @@ func authenticateToVault() (*api.Client, *api.Secret, error) {
 	if *vaultTokenArg != "" {
 
 		// DefaultConfig will digest VAULT_ environment variables
-		cfg := api.DefaultConfig()
+		vaultCfg := api.DefaultConfig()
 
-		jww.INFO.Printf("Logging into Vault server %q with command line token.", cfg.Address)
+		jww.INFO.Printf("Logging into Vault server %q with command line token.", vaultCfg.Address)
 
-		client, secret, err := performTokenAuth(cfg, *vaultTokenArg)
+		client, secret, err := performTokenAuth(vaultCfg, *vaultTokenArg)
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", cfg.Address, err)
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", vaultCfg.Address, err)
 		}
 		return client, secret, nil
 	}
@@ -176,13 +179,13 @@ func authenticateToVault() (*api.Client, *api.Secret, error) {
 	if vaultToken != "" {
 
 		// DefaultConfig will digest VAULT_ environment variables
-		cfg := api.DefaultConfig()
+		vaultCfg := api.DefaultConfig()
 
-		jww.INFO.Printf("Logging into Vault server %q with token in %q", cfg.Address, api.EnvVaultToken)
+		jww.INFO.Printf("Logging into Vault server %q with token in %q", vaultCfg.Address, api.EnvVaultToken)
 
-		client, secret, err := performTokenAuth(cfg, vaultToken)
+		client, secret, err := performTokenAuth(vaultCfg, vaultToken)
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using %q: %v", cfg.Address,
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using %q: %v", vaultCfg.Address,
 				api.EnvVaultToken, err)
 		}
 		return client, secret, nil
@@ -207,13 +210,13 @@ func authenticateToVault() (*api.Client, *api.Secret, error) {
 			} else if len(configMaps.Items) == 1 {
 				if token, exists := configMaps.Items[0].Data["token"]; exists {
 					// DefaultConfig will digest VAULT_ environment variables
-					cfg := api.DefaultConfig()
+					vaultCfg := api.DefaultConfig()
 
-					jww.INFO.Printf("Logging into Vault server %q with token from vault-token ConfigMap.", cfg.Address)
+					jww.INFO.Printf("Logging into Vault server %q with token from vault-token ConfigMap.", vaultCfg.Address)
 
-					client, secret, err := performTokenAuth(cfg, token)
+					client, secret, err := performTokenAuth(vaultCfg, token)
 					if err != nil {
-						jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", cfg.Address, err)
+						jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", vaultCfg.Address, err)
 					}
 					return client, secret, nil
 				}
@@ -238,7 +241,7 @@ func readKVSecrets(client *api.Client) map[string]api.Secret {
 
 	var vaultSecretsMapping = make(map[string]api.Secret)
 
-	for _, request := range config.Secrets {
+	for _, request := range cfg.Current.Secrets {
 
 		key := request.Key
 
@@ -272,7 +275,7 @@ func readKVSecrets(client *api.Client) map[string]api.Secret {
 				jww.FATAL.Fatalf("No response returned fetching secrets.")
 			}
 		} else {
-			enrollSecretInLease(response)
+			leases.EnrollSecret(response)
 			vaultSecretsMapping[key] = *response
 		}
 	}
