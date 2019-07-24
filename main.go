@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hashicorp/errwrap"
+	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/aws"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/kv"
@@ -16,11 +18,9 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/sshsigning"
 	"github.com/hootsuite/vault-ctrl-tool/util"
-	"golang.org/x/crypto/ssh"
-
-	"github.com/hashicorp/errwrap"
-	"github.com/hashicorp/vault/api"
+	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 	jww "github.com/spf13/jwalterweatherman"
+	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -66,14 +66,14 @@ func renewLeases(ctx context.Context, client *api.Client) {
 	if leases.Current.AuthTokenLease.CanExpire {
 		if leases.Current.AuthTokenLease.ExpiresAt.Before(threshold) {
 
-			err := renewSelf(ctx, client, *renewLeaseDuration)
+			err := vaultclient.RenewSelf(ctx, client, *renewLeaseDuration)
 
 			if err != nil {
 				jww.ERROR.Printf("error renewing authentication token: %v", err)
 			}
 
 			// If the error is a permission denied, then it will never be renewed, so we're hooped.
-			if err == ErrPermissionDenied {
+			if err == vaultclient.ErrPermissionDenied {
 				scrubber.RemoveFiles()
 				jww.FATAL.Fatalf("Authentication token could no longer be renewed.")
 			}
@@ -171,9 +171,9 @@ func performSidecar() {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	client, _, err := authenticateToVault()
+	client, _, err := vaultclient.Authenticate()
 
-	defer revokeSelf(client)
+	defer vaultclient.RevokeSelf(client)
 
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
@@ -261,7 +261,7 @@ func performInitTasks() {
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
 	}
 
-	client, secret, err := authenticateToVault()
+	client, secret, err := vaultclient.Authenticate()
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
 	}
@@ -273,10 +273,10 @@ func performInitTasks() {
 
 	leases.EnrollAuthToken(secret)
 
-	kvSecrets := readKVSecrets(client)
+	kvSecrets := vaultclient.ReadKVSecrets(client)
 
 	// Output necessary files
-	if err := writeVaultToken(token); err != nil {
+	if err := vaultclient.WriteToken(token); err != nil {
 		jww.FATAL.Fatalf("Could not write vault token: %v", err)
 	}
 
@@ -344,6 +344,12 @@ func main() {
 	util.SetPrefixes(inputPrefix, outputPrefix)
 	leases.SetLeasesFile(leasesFile)
 	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
+
+	vaultclient.ConfigureVaultClient(serviceAccountToken,
+		serviceSecretPrefix,
+		k8sLoginPath,
+		k8sAuthRole,
+		vaultTokenArg)
 
 	setupLogging()
 

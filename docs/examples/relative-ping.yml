@@ -1,5 +1,6 @@
 # This will insert an example secret into an existing template file.
-# Note the path is relative, so v-c-t prefixes it automatically with /secret/aplication-config/services/secret/
+# Note the path is relative, so v-c-t prefixes it automatically with /secret/application-config/services/secret/
+# This can be overridden with --secret-prefix.
 
 # Useful if you already have a configuration file that just needs some secrets populated into it.
 

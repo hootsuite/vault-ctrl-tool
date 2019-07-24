@@ -1,4 +1,4 @@
-package main
+package vaultclient
 
 import (
 	"context"
@@ -25,6 +25,31 @@ import (
 
 var ErrPermissionDenied = errors.New("permission denied")
 
+var serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg string
+
+func ConfigureVaultClient(tokenFile, secretPrefix, loginPath, authRole, tokenArg *string) {
+
+	if tokenFile != nil {
+		serviceAccountToken = *tokenFile
+	}
+
+	if secretPrefix != nil {
+		serviceSecretPrefix = *secretPrefix
+	}
+
+	if loginPath != nil {
+		k8sLoginPath = *loginPath
+	}
+
+	if authRole != nil {
+		k8sAuthRole = *authRole
+	}
+
+	if tokenArg != nil {
+		vaultTokenArg = *tokenArg
+	}
+}
+
 func defaultRetryStrategy(max time.Duration) backoff.BackOff {
 	strategy := backoff.NewExponentialBackOff()
 	strategy.InitialInterval = time.Millisecond * 500
@@ -32,7 +57,7 @@ func defaultRetryStrategy(max time.Duration) backoff.BackOff {
 	return strategy
 }
 
-func revokeSelf(client *api.Client) {
+func RevokeSelf(client *api.Client) {
 	jww.DEBUG.Printf("Revoking Vault token.")
 	err := client.Auth().Token().RevokeSelf(client.Token())
 	if err != nil {
@@ -40,7 +65,7 @@ func revokeSelf(client *api.Client) {
 	}
 }
 
-func renewSelf(ctx context.Context, client *api.Client, duration time.Duration) error {
+func RenewSelf(ctx context.Context, client *api.Client, duration time.Duration) error {
 	jww.INFO.Print("Renewing Vault authentication token.")
 	op := func() error {
 		secret, err := client.Auth().Token().RenewSelf(int(duration.Seconds()))
@@ -75,16 +100,16 @@ func performKubernetesAuth() (*api.Client, *api.Secret, error) {
 		jww.FATAL.Fatalf("Failed to create vault client to %q: %v", client.Address(), err)
 	}
 
-	jww.INFO.Printf("Reading Kubernetes service account token: %q", *serviceAccountToken)
-	tokenBytes, err := ioutil.ReadFile(*serviceAccountToken)
+	jww.INFO.Printf("Reading Kubernetes service account token: %q", serviceAccountToken)
+	tokenBytes, err := ioutil.ReadFile(serviceAccountToken)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	jww.INFO.Printf("Authenticating to %q as role %q against %q", *k8sLoginPath, *k8sAuthRole, vaultCfg.Address)
+	jww.INFO.Printf("Authenticating to %q as role %q against %q", k8sLoginPath, k8sAuthRole, vaultCfg.Address)
 
-	req := client.NewRequest("POST", fmt.Sprintf("/v1/auth/%s/login", *k8sLoginPath))
-	err = req.SetJSONBody(&login{JWT: string(tokenBytes), Role: *k8sAuthRole})
+	req := client.NewRequest("POST", fmt.Sprintf("/v1/auth/%s/login", k8sLoginPath))
+	err = req.SetJSONBody(&login{JWT: string(tokenBytes), Role: k8sAuthRole})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,7 +162,7 @@ func performTokenAuth(vaultCfg *api.Config, vaultToken string) (*api.Client, *ap
 // 2. Use the token from --vault-token (if used)
 // 3. Use VAULT_TOKEN if set.
 // 4. Use K8s ServiceAccountToken against the k8s auth backend if specified.
-func authenticateToVault() (*api.Client, *api.Secret, error) {
+func Authenticate() (*api.Client, *api.Secret, error) {
 
 	// If there is a leases token, use it.
 	if leases.Current.AuthTokenLease.Token != "" {
@@ -158,14 +183,14 @@ func authenticateToVault() (*api.Client, *api.Secret, error) {
 
 	// Check if -vault-token was passed in
 
-	if *vaultTokenArg != "" {
+	if vaultTokenArg != "" {
 
 		// DefaultConfig will digest VAULT_ environment variables
 		vaultCfg := api.DefaultConfig()
 
 		jww.INFO.Printf("Logging into Vault server %q with command line token.", vaultCfg.Address)
 
-		client, secret, err := performTokenAuth(vaultCfg, *vaultTokenArg)
+		client, secret, err := performTokenAuth(vaultCfg, vaultTokenArg)
 		if err != nil {
 			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", vaultCfg.Address, err)
 		}
@@ -228,7 +253,7 @@ func authenticateToVault() (*api.Client, *api.Secret, error) {
 
 	// Lastly, if there's a Kubernetes Auth Role setup, use that...
 
-	if *k8sAuthRole != "" {
+	if k8sAuthRole != "" {
 		client, secret, err := performKubernetesAuth()
 		return client, secret, err
 	}
@@ -237,7 +262,7 @@ func authenticateToVault() (*api.Client, *api.Secret, error) {
 	return nil, nil, nil
 }
 
-func readKVSecrets(client *api.Client) map[string]api.Secret {
+func ReadKVSecrets(client *api.Client) map[string]api.Secret {
 
 	var vaultSecretsMapping = make(map[string]api.Secret)
 
@@ -250,7 +275,7 @@ func readKVSecrets(client *api.Client) map[string]api.Secret {
 		var path string
 
 		if !strings.HasPrefix(request.Path, "/") {
-			path = filepath.Join(*serviceSecretPrefix, request.Path)
+			path = filepath.Join(serviceSecretPrefix, request.Path)
 		} else {
 			path = request.Path
 		}

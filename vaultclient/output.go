@@ -1,4 +1,4 @@
-package main
+package vaultclient
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func writeVaultToken(vaultToken string) error {
+func WriteToken(vaultToken string) error {
 
 	outputFilename := cfg.Current.VaultToken.Output
 
