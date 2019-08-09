@@ -162,13 +162,19 @@ func emptySidecar() {
 
 }
 
-func performSidecar(vaultClient vaultclient.VaultClient) {
+func performSidecar(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
 
 	leases.ReadFile()
 
 	if len(leases.Current.ManagedFiles) > 0 {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
+
+	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
+		serviceSecretPrefix,
+		k8sLoginPath,
+		k8sAuthRole,
+		vaultTokenArg)
 
 	err := vaultClient.Authenticate()
 
@@ -243,7 +249,7 @@ func performSidecar(vaultClient vaultclient.VaultClient) {
 	cancel()
 }
 
-func performInitTasks(vaultClient vaultclient.VaultClient) {
+func performInitTasks(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
 
 	jww.DEBUG.Print("Performing init tasks.")
 	cfg.ParseFile(configFile)
@@ -260,7 +266,14 @@ func performInitTasks(vaultClient vaultclient.VaultClient) {
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
 	}
 
+	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
+		serviceSecretPrefix,
+		k8sLoginPath,
+		k8sAuthRole,
+		vaultTokenArg)
+
 	err := vaultClient.Authenticate()
+
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
 	}
@@ -344,12 +357,6 @@ func main() {
 	leases.SetLeasesFile(leasesFile)
 	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
 
-	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		serviceSecretPrefix,
-		k8sLoginPath,
-		k8sAuthRole,
-		vaultTokenArg)
-
 	setupLogging()
 
 	jww.INFO.Printf("Tool Starting.")
@@ -371,14 +378,22 @@ func main() {
 	scrubber.SetupExitScrubber()
 
 	if *initFlag {
-		performInitTasks(vaultClient)
+		performInitTasks(serviceAccountToken,
+			serviceSecretPrefix,
+			k8sLoginPath,
+			k8sAuthRole,
+			vaultTokenArg)
 	} else if *sidecarFlag {
 		cfg.ParseFile(configFile)
 
 		if cfg.IsEmpty() {
 			emptySidecar()
 		} else {
-			performSidecar(vaultClient)
+			performSidecar(serviceAccountToken,
+				serviceSecretPrefix,
+				k8sLoginPath,
+				k8sAuthRole,
+				vaultTokenArg)
 		}
 	}
 
