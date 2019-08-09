@@ -173,7 +173,7 @@ func performSidecar(vaultClient vaultclient.VaultClient) {
 
 	client, _, err := vaultClient.Authenticate()
 
-	defer vaultclient.RevokeSelf(client)
+	defer vaultClient.RevokeSelf(client)
 
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
