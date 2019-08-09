@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/errwrap"
-	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/aws"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/kv"
@@ -56,7 +55,7 @@ var (
 	neverScrub             = kingpin.Flag("never-scrub", "Don't delete outputted files if the tool fails").Default("false").Bool()
 )
 
-func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient, client *api.Client) {
+func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient) {
 
 	threshold := time.Now().Add(*renewInterval).Add(*safetyThreshold)
 	jww.DEBUG.Printf("Will renew all credentials expiring before %v", threshold)
@@ -66,7 +65,7 @@ func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient, clien
 	if leases.Current.AuthTokenLease.CanExpire {
 		if leases.Current.AuthTokenLease.ExpiresAt.Before(threshold) {
 
-			err := vaultClient.RenewSelf(ctx, client, *renewLeaseDuration)
+			err := vaultClient.RenewSelf(ctx, *renewLeaseDuration)
 
 			if err != nil {
 				jww.ERROR.Printf("error renewing authentication token: %v", err)
@@ -87,7 +86,7 @@ func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient, clien
 		//All of our AWS credentials should have the same expiry, as STS expires them after an hour and
 		//we wrote all of them at the same time in the init task
 		if awsLease.Expiry.Before(threshold) {
-			if err := aws.WriteCredentials(client); err != nil {
+			if err := aws.WriteCredentials(vaultClient.Delegate); err != nil {
 				jww.FATAL.Fatalf("Could not write AWS credentials to replace expiring credentials: %v", err)
 			}
 			break
@@ -110,7 +109,7 @@ func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient, clien
 		// 2) fails because of another reason, but is still not expired (in which case we log, but keep going), or
 		// 3) fails because of another reason, but the ssh certificate is now invalid, in which case we exit.
 		if validBefore != uint64(ssh.CertTimeInfinity) && validBefore < uint64(threshold.Unix()) {
-			err := sshsigning.SignKey(client, sshLease.OutputPath, sshLease.VaultMount, sshLease.VaultRole)
+			err := sshsigning.SignKey(vaultClient.Delegate, sshLease.OutputPath, sshLease.VaultMount, sshLease.VaultRole)
 
 			if errwrap.Contains(err, "Code: 403") {
 				jww.FATAL.Fatalf("Permission denied renewing SSH certificate %q.", certificateFilename)
@@ -171,9 +170,9 @@ func performSidecar(vaultClient vaultclient.VaultClient) {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	client, _, err := vaultClient.Authenticate()
+	err := vaultClient.Authenticate()
 
-	defer vaultClient.RevokeSelf(client)
+	defer vaultClient.RevokeSelf()
 
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
@@ -188,7 +187,7 @@ func performSidecar(vaultClient vaultclient.VaultClient) {
 	go func() {
 
 		jww.DEBUG.Printf("Performing auto renewal check on startup.")
-		renewLeases(ctx, vaultClient, client)
+		renewLeases(ctx, vaultClient)
 
 		renewTicks := time.Tick(*renewInterval)
 
@@ -204,7 +203,7 @@ func performSidecar(vaultClient vaultclient.VaultClient) {
 				return
 			case <-renewTicks:
 				jww.INFO.Printf("Renewal Heartbeat")
-				renewLeases(ctx, vaultClient, client)
+				renewLeases(ctx, vaultClient)
 			case <-checkKubeAPITicks:
 				// @TODO
 				jww.INFO.Printf("Performing live check again Kubernetes API")
@@ -261,19 +260,19 @@ func performInitTasks(vaultClient vaultclient.VaultClient) {
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
 	}
 
-	client, secret, err := vaultClient.Authenticate()
+	err := vaultClient.Authenticate()
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
 	}
 
-	token, err := secret.TokenID()
+	token, err := vaultClient.GetTokenID()
 	if err != nil {
 		jww.FATAL.Fatalf("Could not extract Vault Token: %v", err)
 	}
 
-	leases.EnrollAuthToken(secret)
+	leases.EnrollAuthToken(vaultClient.AuthToken)
 
-	kvSecrets := vaultClient.ReadKVSecrets(client)
+	kvSecrets := vaultClient.ReadKVSecrets()
 
 	// Output necessary files
 	if err := vaultclient.WriteToken(token); err != nil {
@@ -288,11 +287,11 @@ func performInitTasks(vaultClient vaultclient.VaultClient) {
 		jww.FATAL.Fatalf("Could not write templates: %v", err)
 	}
 
-	if err := aws.WriteCredentials(client); err != nil {
+	if err := aws.WriteCredentials(vaultClient.Delegate); err != nil {
 		jww.FATAL.Fatalf("Could not write AWS credentials: %v", err)
 	}
 
-	if err := sshsigning.WriteKeys(client); err != nil {
+	if err := sshsigning.WriteKeys(vaultClient.Delegate); err != nil {
 		jww.FATAL.Fatalf("Could not setup SSH certificate: %v", err)
 	}
 
