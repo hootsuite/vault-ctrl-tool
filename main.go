@@ -34,7 +34,7 @@ var (
 	outputPrefix        = kingpin.Flag("output-prefix", "Path to prefix to all output files (such as /etc/secrets)").String()
 	inputPrefix         = kingpin.Flag("input-prefix", "Path to prefix on all files being read; including the config file.").String()
 	leasesFile          = kingpin.Flag("leases-file", "Full path to file to write with leases.").Default("/tmp/vault-leases/vault-ctrl-tool.leases").String()
-	serviceSecretPrefix = kingpin.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").Default("/secret/application-config/services/").String()
+	serviceSecretPrefix = kingpin.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").String()
 
 	// Kubernetes authentication
 	serviceAccountToken = kingpin.Flag("k8s-token-file", "Service account token path").Default("/var/run/secrets/kubernetes.io/serviceaccount/token").String()
@@ -56,7 +56,7 @@ var (
 	neverScrub             = kingpin.Flag("never-scrub", "Don't delete outputted files if the tool fails").Default("false").Bool()
 )
 
-func renewLeases(ctx context.Context, client *api.Client) {
+func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient, client *api.Client) {
 
 	threshold := time.Now().Add(*renewInterval).Add(*safetyThreshold)
 	jww.DEBUG.Printf("Will renew all credentials expiring before %v", threshold)
@@ -66,7 +66,7 @@ func renewLeases(ctx context.Context, client *api.Client) {
 	if leases.Current.AuthTokenLease.CanExpire {
 		if leases.Current.AuthTokenLease.ExpiresAt.Before(threshold) {
 
-			err := vaultclient.RenewSelf(ctx, client, *renewLeaseDuration)
+			err := vaultClient.RenewSelf(ctx, client, *renewLeaseDuration)
 
 			if err != nil {
 				jww.ERROR.Printf("error renewing authentication token: %v", err)
@@ -163,7 +163,7 @@ func emptySidecar() {
 
 }
 
-func performSidecar() {
+func performSidecar(vaultClient vaultclient.VaultClient) {
 
 	leases.ReadFile()
 
@@ -171,7 +171,7 @@ func performSidecar() {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	client, _, err := vaultclient.Authenticate()
+	client, _, err := vaultClient.Authenticate()
 
 	defer vaultclient.RevokeSelf(client)
 
@@ -188,7 +188,7 @@ func performSidecar() {
 	go func() {
 
 		jww.DEBUG.Printf("Performing auto renewal check on startup.")
-		renewLeases(ctx, client)
+		renewLeases(ctx, vaultClient, client)
 
 		renewTicks := time.Tick(*renewInterval)
 
@@ -204,7 +204,7 @@ func performSidecar() {
 				return
 			case <-renewTicks:
 				jww.INFO.Printf("Renewal Heartbeat")
-				renewLeases(ctx, client)
+				renewLeases(ctx, vaultClient, client)
 			case <-checkKubeAPITicks:
 				// @TODO
 				jww.INFO.Printf("Performing live check again Kubernetes API")
@@ -244,7 +244,7 @@ func performSidecar() {
 	cancel()
 }
 
-func performInitTasks() {
+func performInitTasks(vaultClient vaultclient.VaultClient) {
 
 	jww.DEBUG.Print("Performing init tasks.")
 	cfg.ParseFile(configFile)
@@ -261,7 +261,7 @@ func performInitTasks() {
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
 	}
 
-	client, secret, err := vaultclient.Authenticate()
+	client, secret, err := vaultClient.Authenticate()
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
 	}
@@ -273,7 +273,7 @@ func performInitTasks() {
 
 	leases.EnrollAuthToken(secret)
 
-	kvSecrets := vaultclient.ReadKVSecrets(client)
+	kvSecrets := vaultClient.ReadKVSecrets(client)
 
 	// Output necessary files
 	if err := vaultclient.WriteToken(token); err != nil {
@@ -345,7 +345,7 @@ func main() {
 	leases.SetLeasesFile(leasesFile)
 	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
 
-	vaultclient.ConfigureVaultClient(serviceAccountToken,
+	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
 		serviceSecretPrefix,
 		k8sLoginPath,
 		k8sAuthRole,
@@ -372,14 +372,14 @@ func main() {
 	scrubber.SetupExitScrubber()
 
 	if *initFlag {
-		performInitTasks()
+		performInitTasks(vaultClient)
 	} else if *sidecarFlag {
 		cfg.ParseFile(configFile)
 
 		if cfg.IsEmpty() {
 			emptySidecar()
 		} else {
-			performSidecar()
+			performSidecar(vaultClient)
 		}
 	}
 
