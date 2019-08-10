@@ -16,11 +16,11 @@ import (
 
 var templates = make(map[string]*template.Template)
 
-func ingestTemplates() error {
+func ingestTemplates(currentConfig cfg.Config) error {
 
-	jww.DEBUG.Printf("Templates to ingest: %d", len(cfg.Current.Templates))
+	jww.DEBUG.Printf("Templates to ingest: %d", len(currentConfig.Templates))
 
-	for _, tpl := range cfg.Current.Templates {
+	for _, tpl := range currentConfig.Templates {
 
 		jww.DEBUG.Printf("Ingesting template: %q", tpl.Input)
 
@@ -34,7 +34,7 @@ func ingestTemplates() error {
 	return nil
 }
 
-func writeTemplates(kvSecrets map[string]api.Secret) error {
+func writeTemplates(currentConfig cfg.Config, kvSecrets map[string]api.Secret) error {
 
 	tplVars := make(map[string]interface{})
 
@@ -44,7 +44,7 @@ func writeTemplates(kvSecrets map[string]api.Secret) error {
 		}
 	}
 
-	for _, tpl := range cfg.Current.Templates {
+	for _, tpl := range currentConfig.Templates {
 
 		modeString := tpl.Mode
 

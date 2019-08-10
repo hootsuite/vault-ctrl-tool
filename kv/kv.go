@@ -14,12 +14,12 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func WriteOutput(kvSecrets map[string]api.Secret) error {
+func WriteOutput(currentConfig cfg.Config, kvSecrets map[string]api.Secret) error {
 
 	secretsToFileMap := make(map[string][]cfg.SecretType)
 	fileToModeMap := make(map[string]os.FileMode)
 
-	for _, request := range cfg.Current.Secrets {
+	for _, request := range currentConfig.Secrets {
 
 		mode, err := util.StringToFileMode(request.Mode)
 

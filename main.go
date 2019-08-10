@@ -55,7 +55,7 @@ var (
 	neverScrub             = kingpin.Flag("never-scrub", "Don't delete outputted files if the tool fails").Default("false").Bool()
 )
 
-func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient) {
+func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
 
 	threshold := time.Now().Add(*renewInterval).Add(*safetyThreshold)
 	jww.DEBUG.Printf("Will renew all credentials expiring before %v", threshold)
@@ -86,7 +86,7 @@ func renewLeases(ctx context.Context, vaultClient vaultclient.VaultClient) {
 		//All of our AWS credentials should have the same expiry, as STS expires them after an hour and
 		//we wrote all of them at the same time in the init task
 		if awsLease.Expiry.Before(threshold) {
-			if err := aws.WriteCredentials(vaultClient.Delegate); err != nil {
+			if err := aws.WriteCredentials(currentConfig, vaultClient.Delegate); err != nil {
 				jww.FATAL.Fatalf("Could not write AWS credentials to replace expiring credentials: %v", err)
 			}
 			break
@@ -162,12 +162,20 @@ func emptySidecar() {
 
 }
 
-func performSidecar(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
+func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
 
 	leases.ReadFile()
 
 	if len(leases.Current.ManagedFiles) > 0 {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
+	}
+
+	if serviceSecretPrefix == nil {
+		if currentConfig.ConfigVersion < 2 {
+			*serviceSecretPrefix = "/secret/application-config/services/"
+		} else {
+			*serviceSecretPrefix = "/kv/data/application-config/services/"
+		}
 	}
 
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
@@ -193,7 +201,7 @@ func performSidecar(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sA
 	go func() {
 
 		jww.DEBUG.Printf("Performing auto renewal check on startup.")
-		renewLeases(ctx, vaultClient)
+		renewLeases(ctx, currentConfig, vaultClient)
 
 		renewTicks := time.Tick(*renewInterval)
 
@@ -209,7 +217,7 @@ func performSidecar(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sA
 				return
 			case <-renewTicks:
 				jww.INFO.Printf("Renewal Heartbeat")
-				renewLeases(ctx, vaultClient)
+				renewLeases(ctx, currentConfig, vaultClient)
 			case <-checkKubeAPITicks:
 				// @TODO
 				jww.INFO.Printf("Performing live check again Kubernetes API")
@@ -249,12 +257,11 @@ func performSidecar(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sA
 	cancel()
 }
 
-func performInitTasks(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
+func performInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
 
 	jww.DEBUG.Print("Performing init tasks.")
-	cfg.ParseFile(configFile)
 
-	if cfg.IsEmpty() {
+	if currentConfig.IsEmpty() {
 		jww.INFO.Print("Configuration file is empty. Writing empty lease file and skipping authentication.")
 		leases.WriteFile()
 		scrubber.DisableExitScrubber()
@@ -262,8 +269,16 @@ func performInitTasks(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8
 	}
 
 	// Read templates first so we don't waste Vault's time if there's an issue.
-	if err := ingestTemplates(); err != nil {
+	if err := ingestTemplates(currentConfig); err != nil {
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
+	}
+
+	if serviceSecretPrefix == nil {
+		if currentConfig.ConfigVersion < 2 {
+			*serviceSecretPrefix = "/secret/application-config/services/"
+		} else {
+			*serviceSecretPrefix = "/kv/data/application-config/services/"
+		}
 	}
 
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
@@ -285,26 +300,26 @@ func performInitTasks(serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8
 
 	leases.EnrollAuthToken(vaultClient.AuthToken)
 
-	kvSecrets := vaultClient.ReadKVSecrets()
+	kvSecrets := vaultClient.ReadKVSecrets(currentConfig)
 
 	// Output necessary files
-	if err := vaultclient.WriteToken(token); err != nil {
+	if err := vaultclient.WriteToken(currentConfig, token); err != nil {
 		jww.FATAL.Fatalf("Could not write vault token: %v", err)
 	}
 
-	if err := kv.WriteOutput(kvSecrets); err != nil {
+	if err := kv.WriteOutput(currentConfig, kvSecrets); err != nil {
 		jww.FATAL.Fatalf("Could not write KV secrets: %v", err)
 	}
 
-	if err := writeTemplates(kvSecrets); err != nil {
+	if err := writeTemplates(currentConfig, kvSecrets); err != nil {
 		jww.FATAL.Fatalf("Could not write templates: %v", err)
 	}
 
-	if err := aws.WriteCredentials(vaultClient.Delegate); err != nil {
+	if err := aws.WriteCredentials(currentConfig, vaultClient.Delegate); err != nil {
 		jww.FATAL.Fatalf("Could not write AWS credentials: %v", err)
 	}
 
-	if err := sshsigning.WriteKeys(vaultClient.Delegate); err != nil {
+	if err := sshsigning.WriteKeys(currentConfig, vaultClient.Delegate); err != nil {
 		jww.FATAL.Fatalf("Could not setup SSH certificate: %v", err)
 	}
 
@@ -377,19 +392,24 @@ func main() {
 	defer scrubber.RunExitScrubber()
 	scrubber.SetupExitScrubber()
 
+	currentConfig, err := cfg.ParseFile(configFile)
+
+	if err != nil {
+		jww.FATAL.Printf("Could not read config file %v: %v", configFile, err)
+	}
+
 	if *initFlag {
-		performInitTasks(serviceAccountToken,
+		performInitTasks(*currentConfig, serviceAccountToken,
 			serviceSecretPrefix,
 			k8sLoginPath,
 			k8sAuthRole,
 			vaultTokenArg)
 	} else if *sidecarFlag {
-		cfg.ParseFile(configFile)
 
-		if cfg.IsEmpty() {
+		if currentConfig.IsEmpty() {
 			emptySidecar()
 		} else {
-			performSidecar(serviceAccountToken,
+			performSidecar(*currentConfig, serviceAccountToken,
 				serviceSecretPrefix,
 				k8sLoginPath,
 				k8sAuthRole,

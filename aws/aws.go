@@ -16,12 +16,12 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func WriteCredentials(client *api.Client) error {
+func WriteCredentials(currentConfig cfg.Config, client *api.Client) error {
 
 	jww.DEBUG.Printf("Processing AWS credentials")
 	wipDirs := make(map[string]bool)
 
-	for _, awsConfig := range cfg.Current.AWS {
+	for _, awsConfig := range currentConfig.AWS {
 		if err := generateFiles(client, awsConfig); err != nil {
 			return err
 		}

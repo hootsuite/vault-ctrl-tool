@@ -61,22 +61,24 @@ type AWSType struct {
 
 // Config is used to set up the tool and fetch all the appropriate secrets.
 type Config struct {
-	VaultToken VaultTokenType `yaml:"vaultToken"`
-	Templates  []TemplateType `yaml:"templates"`
-	Secrets    []SecretType   `yaml:"secrets"`
-	SSH        []SSHType      `yaml:"sshCertificates"`
-	AWS        []AWSType      `yaml:"aws"`
+	// v0 or v1: Default prefix for Secrets is /secret/application-config/services/
+	// v2: Default prefix for Secrets is /kv/data/application-config/services/
+	ConfigVersion int            `yaml:"version"`
+	VaultToken    VaultTokenType `yaml:"vaultToken"`
+	Templates     []TemplateType `yaml:"templates"`
+	Secrets       []SecretType   `yaml:"secrets"`
+	SSH           []SSHType      `yaml:"sshCertificates"`
+	AWS           []AWSType      `yaml:"aws"`
 }
 
-// Globally accessible configuration variable. General sanity check has been performed on it by prepareConfig.
-var Current Config
-
-func IsEmpty() bool {
-	if Current.VaultToken.Output == "" &&
-		len(Current.Templates) == 0 &&
-		len(Current.AWS) == 0 &&
-		len(Current.SSH) == 0 &&
-		len(Current.Secrets) == 0 {
+// IsEmpty will return true if no secrets are configured. It will also return true if only the top level "version"
+// field is set.
+func (current Config) IsEmpty() bool {
+	if current.VaultToken.Output == "" &&
+		len(current.Templates) == 0 &&
+		len(current.AWS) == 0 &&
+		len(current.SSH) == 0 &&
+		len(current.Secrets) == 0 {
 		return true
 	}
 
@@ -84,23 +86,23 @@ func IsEmpty() bool {
 }
 
 // Validate the configuration and do any modifications that make the rest of the code easier.
-func prepareConfig(filename string) {
+func prepareConfig(filename string, current *Config) {
 
-	if IsEmpty() {
+	if current.IsEmpty() {
 		jww.WARN.Print("Configuration file lists nothing to output.")
 	}
 
 	keys := make(map[string]bool)
 	var happy = true
 
-	if Current.VaultToken.Output != "" {
-		Current.VaultToken.Output = util.AbsoluteOutputPath(Current.VaultToken.Output)
+	if current.VaultToken.Output != "" {
+		current.VaultToken.Output = util.AbsoluteOutputPath(current.VaultToken.Output)
 	}
 
 	// Go through the template config and clean it up..
 	var tidyTpls []TemplateType
 
-	for _, tpl := range Current.Templates {
+	for _, tpl := range current.Templates {
 		if tpl.Input == "" {
 			jww.WARN.Printf("There is a template stanza missing a input file in the configuration file ('imput').")
 			happy = false
@@ -116,12 +118,12 @@ func prepareConfig(filename string) {
 		tidyTpls = append(tidyTpls, tpl)
 	}
 
-	Current.Templates = tidyTpls
+	current.Templates = tidyTpls
 
 	// Go through the secrets config and clean it up...
 	var tidySecrets []SecretType
 
-	for _, secret := range Current.Secrets {
+	for _, secret := range current.Secrets {
 		if secret.Key == "" {
 			jww.WARN.Printf("There is a secret stanza missing a 'key' value in the configuration file.")
 			happy = false
@@ -160,12 +162,12 @@ func prepareConfig(filename string) {
 		tidySecrets = append(tidySecrets, secret)
 	}
 
-	Current.Secrets = tidySecrets
+	current.Secrets = tidySecrets
 
 	// Go through the SSH config and clean it up..
 	var tidySSH []SSHType
 
-	for _, ssh := range Current.SSH {
+	for _, ssh := range current.SSH {
 		if ssh.VaultRole == "" {
 			jww.WARN.Printf("There is a SSH stanza missing its 'vaultRole'.")
 			happy = false
@@ -183,12 +185,12 @@ func prepareConfig(filename string) {
 		tidySSH = append(tidySSH, ssh)
 	}
 
-	Current.SSH = tidySSH
+	current.SSH = tidySSH
 
 	// Go through the AWS config and clean it up...
 	var tidyAWS []AWSType
 
-	for _, aws := range Current.AWS {
+	for _, aws := range current.AWS {
 		if aws.VaultRole == "" {
 			jww.WARN.Printf("There is an AWS stanza missing its 'vaultRole'.")
 			happy = false
@@ -215,7 +217,7 @@ func prepareConfig(filename string) {
 		tidyAWS = append(tidyAWS, aws)
 	}
 
-	Current.AWS = tidyAWS
+	current.AWS = tidyAWS
 
 	// If we're not happy and we know it, clap^Wfail fatally..
 	if !happy {
@@ -223,7 +225,7 @@ func prepareConfig(filename string) {
 	}
 }
 
-func ParseFile(configFile *string) {
+func ParseFile(configFile *string) (*Config, error) {
 
 	if configFile == nil || *configFile == "" {
 		jww.FATAL.Fatalf("A --config file is required to be specified.")
@@ -237,12 +239,16 @@ func ParseFile(configFile *string) {
 		jww.FATAL.Fatalf("Error reading config file %q: %v", absConfigFile, err)
 	}
 
-	err = yaml.Unmarshal(yamlFile, &Current)
+	var current Config
+
+	err = yaml.Unmarshal(yamlFile, &current)
 
 	if err != nil {
 		jww.FATAL.Fatalf("error unmarshalling config file %q: %v", absConfigFile, err)
 	}
 
-	prepareConfig(absConfigFile)
+	prepareConfig(absConfigFile, &current)
+
+	return &current, nil
 
 }

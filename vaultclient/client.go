@@ -287,11 +287,11 @@ func (vc *VaultClient) Authenticate() error {
 	return nil
 }
 
-func (vc VaultClient) ReadKVSecrets() map[string]api.Secret {
+func (vc VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Secret {
 
 	var vaultSecretsMapping = make(map[string]api.Secret)
 
-	for _, request := range cfg.Current.Secrets {
+	for _, request := range currentConfig.Secrets {
 
 		key := request.Key
 
