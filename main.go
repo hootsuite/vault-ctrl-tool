@@ -26,6 +26,7 @@ var (
 	// Mode flags
 	initFlag    = kingpin.Flag("init", "Run in init mode, process templates and exit.").Default("false").Bool()
 	sidecarFlag = kingpin.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").Bool()
+	oneShotFlag = kingpin.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").Bool()
 	cleanupFlag = kingpin.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").Bool()
 
 	// Init options
@@ -190,6 +191,10 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, syscall.SIGTERM)
 
+	if *oneShotFlag == true {
+		signal.Notify(c, syscall.SIGALRM)
+	}
+
 	go func() {
 
 		jww.DEBUG.Printf("Performing auto renewal check on startup.")
@@ -241,6 +246,10 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 			}
 		}
 	}()
+
+	if *oneShotFlag == true {
+		c <- syscall.SIGALRM
+	}
 
 	<-c
 
@@ -333,6 +342,10 @@ func checkArgs() {
 	actions := 0
 	if *initFlag {
 		actions++
+
+		if *oneShotFlag == true {
+			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
+		}
 	}
 
 	if *sidecarFlag {
@@ -341,10 +354,13 @@ func checkArgs() {
 
 	if *cleanupFlag {
 		actions++
+		if *oneShotFlag == true {
+			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
+		}
 	}
 
 	if actions != 1 {
-		jww.FATAL.Fatalf("Specify one of --init, --sidecar, or --cleanup flags.")
+		jww.FATAL.Fatalf("Specify exactly one of --init, --sidecar, or --cleanup flags.")
 	}
 }
 
