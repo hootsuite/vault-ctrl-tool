@@ -170,16 +170,8 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	if serviceSecretPrefix == nil {
-		if currentConfig.ConfigVersion < 2 {
-			*serviceSecretPrefix = "/secret/application-config/services/"
-		} else {
-			*serviceSecretPrefix = "/kv/data/application-config/services/"
-		}
-	}
-
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		serviceSecretPrefix,
+		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
 		k8sLoginPath,
 		k8sAuthRole,
 		vaultTokenArg)
@@ -257,6 +249,20 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 	cancel()
 }
 
+func calculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string) string {
+
+	if serviceSecretPrefix != nil {
+		return *serviceSecretPrefix
+	}
+
+	if currentConfig.ConfigVersion < 2 {
+		return "/secret/application-config/services/"
+	} else {
+		return "/kv/data/application-config/services/"
+	}
+
+}
+
 func performInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
 
 	jww.DEBUG.Print("Performing init tasks.")
@@ -273,16 +279,8 @@ func performInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecr
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
 	}
 
-	if serviceSecretPrefix == nil {
-		if currentConfig.ConfigVersion < 2 {
-			*serviceSecretPrefix = "/secret/application-config/services/"
-		} else {
-			*serviceSecretPrefix = "/kv/data/application-config/services/"
-		}
-	}
-
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		serviceSecretPrefix,
+		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
 		k8sLoginPath,
 		k8sAuthRole,
 		vaultTokenArg)

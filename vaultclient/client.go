@@ -40,7 +40,7 @@ func (vc VaultClient) GetTokenID() (string, error) {
 	return vc.AuthToken.TokenID()
 }
 
-func NewVaultClient(tokenFile, secretPrefix, loginPath, authRole, tokenArg *string) VaultClient {
+func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole, tokenArg *string) VaultClient {
 
 	var vc VaultClient
 
@@ -48,9 +48,7 @@ func NewVaultClient(tokenFile, secretPrefix, loginPath, authRole, tokenArg *stri
 		vc.serviceAccountToken = *tokenFile
 	}
 
-	if secretPrefix != nil {
-		vc.serviceSecretPrefix = *secretPrefix
-	}
+	vc.serviceSecretPrefix = secretPrefix
 
 	if loginPath != nil {
 		vc.k8sLoginPath = *loginPath
