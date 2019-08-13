@@ -187,17 +187,28 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	if *oneShotFlag {
+		performOneShotSidecar(ctx, currentConfig, vaultClient)
+	} else {
+		performPeriodicSidecar(ctx, currentConfig, vaultClient)
+		cancel()
+	}
+}
+
+func performOneShotSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
+	renewLeases(ctx, currentConfig, vaultClient)
+}
+
+func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, syscall.SIGTERM)
 
-	if *oneShotFlag == true {
-		signal.Notify(c, syscall.SIGALRM)
-	}
-
 	go func() {
 
 		jww.DEBUG.Printf("Performing auto renewal check on startup.")
+
 		renewLeases(ctx, currentConfig, vaultClient)
 
 		renewTicks := time.Tick(*renewInterval)
@@ -247,15 +258,8 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 		}
 	}()
 
-	if *oneShotFlag == true {
-		c <- syscall.SIGALRM
-	}
-
 	<-c
-
 	jww.INFO.Printf("Shutting down.")
-
-	cancel()
 }
 
 func calculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string) string {
