@@ -165,6 +165,15 @@ func emptySidecar() {
 
 func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
 
+	if currentConfig.IsEmpty() {
+		if *oneShotFlag {
+			return
+		} else {
+			emptySidecar()
+			return
+		}
+	}
+
 	leases.ReadFile()
 
 	if len(leases.Current.ManagedFiles) > 0 {
@@ -179,8 +188,6 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 
 	err := vaultClient.Authenticate()
 
-	defer vaultClient.RevokeSelf()
-
 	if err != nil {
 		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
 	}
@@ -188,15 +195,14 @@ func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if *oneShotFlag {
-		performOneShotSidecar(ctx, currentConfig, vaultClient)
+		renewLeases(ctx, currentConfig, vaultClient)
+		// If the one shot didn't fatal, then it worked, so don't scrub anything on exit.
+		scrubber.DisableExitScrubber()
 	} else {
+		defer vaultClient.RevokeSelf()
 		performPeriodicSidecar(ctx, currentConfig, vaultClient)
 		cancel()
 	}
-}
-
-func performOneShotSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
-	renewLeases(ctx, currentConfig, vaultClient)
 }
 
 func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
