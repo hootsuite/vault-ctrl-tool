@@ -15,22 +15,13 @@ func (vc *VaultClient) performKubernetesAuth() error {
 		Role string `json:"role"`
 	}
 
-	vaultCfg := api.DefaultConfig()
-	newCli, err := api.NewClient(vaultCfg)
-
-	if err != nil {
-		jww.FATAL.Fatalf("Failed to create vault client to %q: %v", newCli.Address(), err)
-	}
-
-	vc.Delegate = newCli
-
 	jww.INFO.Printf("Reading Kubernetes service account token: %q", vc.serviceAccountToken)
 	tokenBytes, err := ioutil.ReadFile(vc.serviceAccountToken)
 	if err != nil {
 		return err
 	}
 
-	jww.INFO.Printf("Authenticating to %q as role %q against %q", vc.k8sLoginPath, vc.k8sAuthRole, vaultCfg.Address)
+	jww.INFO.Printf("Authenticating to %q as role %q against %q", vc.k8sLoginPath, vc.k8sAuthRole, vc.Config.Address)
 
 	req := vc.Delegate.NewRequest("POST", fmt.Sprintf("/v1/auth/%s/login", vc.k8sLoginPath))
 	err = req.SetJSONBody(&login{JWT: string(tokenBytes), Role: vc.k8sAuthRole})
