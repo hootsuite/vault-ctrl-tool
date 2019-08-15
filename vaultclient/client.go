@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/util"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,9 +24,9 @@ import (
 var ErrPermissionDenied = errors.New("permission denied")
 
 type VaultClient struct {
-	serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg string
-	Delegate                                                                           *api.Client
-	AuthToken                                                                          *api.Secret
+	serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole string
+	Delegate                                                            *api.Client
+	AuthToken                                                           *api.Secret
 }
 
 func (vc VaultClient) GetTokenID() (string, error) {
@@ -37,7 +38,7 @@ func (vc VaultClient) GetTokenID() (string, error) {
 	return vc.AuthToken.TokenID()
 }
 
-func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole, tokenArg *string) VaultClient {
+func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole *string) VaultClient {
 
 	var vc VaultClient
 
@@ -53,10 +54,6 @@ func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole,
 
 	if authRole != nil {
 		vc.k8sAuthRole = *authRole
-	}
-
-	if tokenArg != nil {
-		vc.vaultTokenArg = *tokenArg
 	}
 
 	return vc
@@ -99,7 +96,6 @@ func (vc VaultClient) RenewSelf(ctx context.Context, duration time.Duration) err
 
 	return err
 }
-
 
 func (vc *VaultClient) performTokenAuth(vaultCfg *api.Config, vaultToken string) error {
 	client, err := api.NewClient(vaultCfg)
@@ -149,19 +145,36 @@ func (vc *VaultClient) Authenticate() error {
 
 	// Check if -vault-token was passed in
 
-	if vc.vaultTokenArg != "" {
+	if util.Flags.VaultTokenArg != "" {
 
 		// DefaultConfig will digest VAULT_ environment variables
 		vaultCfg := api.DefaultConfig()
 
 		jww.INFO.Printf("Logging into Vault server %q with command line token.", vaultCfg.Address)
 
-		err := vc.performTokenAuth(vaultCfg, vc.vaultTokenArg)
+		err := vc.performTokenAuth(vaultCfg, util.Flags.VaultTokenArg)
 
 		if err != nil {
 			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", vaultCfg.Address, err)
 		}
 		return nil
+	}
+
+	// If EC2 auth is requested
+
+	if util.Flags.EC2AuthEnabled {
+
+		// DefaultConfig will digest VAULT_ environment variables
+		vaultCfg := api.DefaultConfig()
+
+		err := vc.performEC2Auth()
+
+		if err != nil {
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q as an EC2 Instance: %v", vaultCfg.Address, err)
+		}
+
+		return nil
+
 	}
 
 	// Otherwise, if VAULT_TOKEN is set, use that.
@@ -196,24 +209,29 @@ func (vc *VaultClient) Authenticate() error {
 			jww.DEBUG.Print("Could not create clientset to call Kubernetes API")
 		} else {
 
-			configMaps, err := clientset.CoreV1().ConfigMaps("default").List(v1.ListOptions{FieldSelector: "metadata.name=vault-token"})
-			if err != nil {
-				jww.DEBUG.Printf("Failed to get configmaps filtered on the name vault-token: %v", err)
-			} else if len(configMaps.Items) == 1 {
-				if token, exists := configMaps.Items[0].Data["token"]; exists {
-					// DefaultConfig will digest VAULT_ environment variables
-					vaultCfg := api.DefaultConfig()
+			// Developers running Kubernetes clusters locally do not have the ability to have their services authenticate to Vault.
+			// To work around this, the bootstrapping shell scripts for dev clusters create a configmap called "vault-token"
+			// with their Vault token in it. This stanza checks for that special configmap and uses it.
+			if util.EnableKubernetesVaultTokenAuthentication {
+				configMaps, err := clientset.CoreV1().ConfigMaps("default").List(v1.ListOptions{FieldSelector: "metadata.name=vault-token"})
+				if err != nil {
+					jww.DEBUG.Printf("Failed to get ConfigMaps filtered on the metadata.name=vault-token: %v", err)
+				} else if len(configMaps.Items) == 1 {
+					if token, exists := configMaps.Items[0].Data["token"]; exists {
+						// DefaultConfig will digest VAULT_ environment variables
+						vaultCfg := api.DefaultConfig()
 
-					jww.INFO.Printf("Logging into Vault server %q with token from vault-token ConfigMap.", vaultCfg.Address)
+						jww.INFO.Printf("Logging into Vault server %q with token from vault-token ConfigMap.", vaultCfg.Address)
 
-					err := vc.performTokenAuth(vaultCfg, token)
-					if err != nil {
-						jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", vaultCfg.Address, err)
+						err := vc.performTokenAuth(vaultCfg, token)
+						if err != nil {
+							jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", vaultCfg.Address, err)
+						}
+						return nil
 					}
-					return nil
+				} else {
+					jww.DEBUG.Print("Multiple ConfigMaps were returned when filtering ConfigMaps with metadata.name=vault-token; please remove all but one.")
 				}
-			} else {
-				jww.DEBUG.Print("Damn, multiple configmaps were returned when filtering configmaps with the name vault-token. How did this even happen?")
 			}
 		}
 	}

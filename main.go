@@ -27,15 +27,8 @@ var (
 	k8sLoginPath        = kingpin.Flag("k8s-login-path", "Vault path to authenticate against").Default(os.Getenv("K8S_LOGIN_PATH")).String()
 	k8sAuthRole         = kingpin.Flag("k8s-auth-role", "Kubernetes authentication role").String()
 
-	// EC2 Authentication
-	ec2Auth      = kingpin.Flag("ec2-auth", "Use EC2 metadata to authenticate to Vault").Default("false").Bool()
-	ec2Role      = kingpin.Flag("ec2-auth-role", "Override the rolename used to authenticate to Vault.").String()
-	ec2AuthTest  = kingpin.Flag("ec2-auth-test", "Perform a test authentication and print out the returned token and nonce.").Default("false").Bool()
-	ec2LoginPath = kingpin.Flag("ec2-login-path", "Vault path to authenticate against").Default(util.VaultEC2AuthPath).String()
-
 	// Shared options
-	debug         = kingpin.Flag("debug", "Log at debug level").Default("false").Bool()
-	vaultTokenArg = kingpin.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").String()
+	debug = kingpin.Flag("debug", "Log at debug level").Default("false").Bool()
 
 	// Flags for smoothing out edge cases.
 	ignoreNonRenewableAuth = kingpin.Flag("ignore-non-renewable-auth", "Do not fail fatally if the authentication token has a limited life but is not renewable").Default("false").Bool()
@@ -61,10 +54,6 @@ func checkArgs() {
 		if util.Flags.PerformOneShot == true {
 			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
 		}
-	}
-
-	if *ec2AuthTest {
-		actions++
 	}
 
 	if actions != 1 {
@@ -94,6 +83,12 @@ func processArgs() {
 	// Sidecar options
 	kingpin.Flag("renew-safety-threshold", "Proactively renew leases expiring before the next interval, minus this value.").Default("8m").DurationVar(&util.Flags.SafetyThreshold)
 	kingpin.Flag("renew-lease-duration", "How long to request leases to be renewed for").Default("1h").DurationVar(&util.Flags.RenewLeaseDuration)
+	kingpin.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").StringVar(&util.Flags.VaultTokenArg)
+
+	// EC2 Authentication
+	kingpin.Flag("ec2-auth", "Use EC2 metadata to authenticate to Vault").Default("false").BoolVar(&util.Flags.EC2AuthEnabled)
+	kingpin.Flag("ec2-auth-role", "Override the rolename used to authenticate to Vault.").StringVar(&util.Flags.EC2AuthRole)
+	kingpin.Flag("ec2-login-path", "Vault path to authenticate against").Default(util.VaultEC2AuthPath).StringVar(&util.Flags.EC2VaultAuthPath)
 
 	kingpin.Parse()
 
@@ -103,11 +98,6 @@ func processArgs() {
 func main() {
 
 	processArgs()
-
-	if *ec2AuthTest == true {
-		activity.PerformEC2AuthTest()
-		return
-	}
 
 	util.SetPrefixes(inputPrefix, outputPrefix)
 	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
@@ -142,8 +132,8 @@ func main() {
 		activity.PerformInitTasks(*currentConfig, serviceAccountToken,
 			serviceSecretPrefix,
 			k8sLoginPath,
-			k8sAuthRole,
-			vaultTokenArg)
+			k8sAuthRole)
+
 	} else if *sidecarFlag {
 
 		if currentConfig.IsEmpty() {
@@ -152,8 +142,7 @@ func main() {
 			activity.PerformSidecar(*currentConfig, serviceAccountToken,
 				serviceSecretPrefix,
 				k8sLoginPath,
-				k8sAuthRole,
-				vaultTokenArg)
+				k8sAuthRole)
 		}
 	}
 

@@ -63,11 +63,15 @@ func (vc *VaultClient) performEC2Auth() error {
 		return err
 	}
 
+	jww.DEBUG.Printf("Fetched PKCS7 payload of %d bytes.", len(pkcs7))
+
 	ami, err := vc.fetchAMI()
 
 	if err != nil {
 		return err
 	}
+
+	jww.DEBUG.Printf("Deteremined AMI is %q.", ami)
 
 	req := vc.Delegate.NewRequest("POST", util.VaultEC2AuthPath)
 	err = req.SetJSONBody(&login{role: ami, pkcs7: pkcs7})
@@ -75,6 +79,8 @@ func (vc *VaultClient) performEC2Auth() error {
 	if err != nil {
 		return err
 	}
+
+	jww.DEBUG.Printf("Sending EC2 Auth request: %v", req)
 
 	resp, err := vc.Delegate.RawRequest(req)
 	if err != nil {
@@ -91,6 +97,8 @@ func (vc *VaultClient) performEC2Auth() error {
 	if err != nil {
 		return errwrap.Wrapf("error parsing response: {{err}}", err)
 	}
+
+	jww.DEBUG.Printf("Result: %v", secret)
 
 	token, err := secret.TokenID()
 	if err != nil {

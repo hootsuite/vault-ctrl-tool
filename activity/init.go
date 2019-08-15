@@ -9,10 +9,9 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/sshsigning"
 	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 	jww "github.com/spf13/jwalterweatherman"
-
 )
 
-func PerformInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
+func PerformInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole *string) {
 
 	jww.DEBUG.Print("Performing init tasks.")
 
@@ -31,8 +30,7 @@ func PerformInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecr
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
 		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
 		k8sLoginPath,
-		k8sAuthRole,
-		vaultTokenArg)
+		k8sAuthRole)
 
 	err := vaultClient.Authenticate()
 

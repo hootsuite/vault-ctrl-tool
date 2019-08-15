@@ -150,7 +150,7 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 	jww.INFO.Printf("Shutting down.")
 }
 
-func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
+func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole *string) {
 
 	if currentConfig.IsEmpty() {
 		if util.Flags.PerformOneShot {
@@ -170,8 +170,7 @@ func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
 		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
 		k8sLoginPath,
-		k8sAuthRole,
-		vaultTokenArg)
+		k8sAuthRole)
 
 	err := vaultClient.Authenticate()
 

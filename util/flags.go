@@ -12,6 +12,10 @@ type CliFlags struct {
 	ShutdownTriggerFile string
 	RenewLeaseDuration  time.Duration
 	SafetyThreshold     time.Duration
+	VaultTokenArg       string
+	EC2AuthEnabled      bool
+	EC2AuthRole         string
+	EC2VaultAuthPath    string
 }
 
 var Flags CliFlags

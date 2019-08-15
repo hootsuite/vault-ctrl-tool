@@ -21,9 +21,9 @@ func calculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string
 	}
 
 	if currentConfig.ConfigVersion < 2 {
-		return util.SecretsServicePath_V1
+		return util.SecretsServicePathV1
 	} else {
-		return util.SecretsServicePath_V2
+		return util.SecretsServicePathV2
 	}
 
 }
