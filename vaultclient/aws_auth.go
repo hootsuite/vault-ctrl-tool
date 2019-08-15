@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
+	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
 	"io/ioutil"
 	"net/http"
 	"strings"
 )
-
-const VaultEC2AuthPath = "/v1/auth/aws-ec2/login"
 
 func (vc *VaultClient) fetchAMI() (string, error) {
 	resp, err := http.Get("http://169.254.169.254/latest/meta-data/ami-id")
@@ -70,7 +69,7 @@ func (vc *VaultClient) performEC2Auth() error {
 		return err
 	}
 
-	req := vc.Delegate.NewRequest("POST", VaultEC2AuthPath)
+	req := vc.Delegate.NewRequest("POST", util.VaultEC2AuthPath)
 	err = req.SetJSONBody(&login{role: ami, pkcs7: pkcs7})
 
 	if err != nil {

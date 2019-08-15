@@ -1,39 +1,25 @@
 package main
 
 import (
-	"context"
-	"gopkg.in/alecthomas/kingpin.v2"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
-	"time"
-
-	"github.com/hashicorp/errwrap"
-	"github.com/hootsuite/vault-ctrl-tool/aws"
+	"github.com/hootsuite/vault-ctrl-tool/activity"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
-	"github.com/hootsuite/vault-ctrl-tool/kv"
 	"github.com/hootsuite/vault-ctrl-tool/leases"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
-	"github.com/hootsuite/vault-ctrl-tool/sshsigning"
 	"github.com/hootsuite/vault-ctrl-tool/util"
-	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 	jww "github.com/spf13/jwalterweatherman"
-	"golang.org/x/crypto/ssh"
+	"gopkg.in/alecthomas/kingpin.v2"
+	"os"
 )
 
 var (
 	// Mode flags
-	initFlag    = kingpin.Flag("init", "Run in init mode, process templates and exit.").Default("false").Bool()
 	sidecarFlag = kingpin.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").Bool()
-	oneShotFlag = kingpin.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").Bool()
 	cleanupFlag = kingpin.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").Bool()
 
 	// Init options
 	configFile          = kingpin.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").String()
 	outputPrefix        = kingpin.Flag("output-prefix", "Path to prefix to all output files (such as /etc/secrets)").String()
 	inputPrefix         = kingpin.Flag("input-prefix", "Path to prefix on all files being read; including the config file.").String()
-	leasesFile          = kingpin.Flag("leases-file", "Full path to file to write with leases.").Default("/tmp/vault-leases/vault-ctrl-tool.leases").String()
 	serviceSecretPrefix = kingpin.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").String()
 
 	// Kubernetes authentication
@@ -41,11 +27,11 @@ var (
 	k8sLoginPath        = kingpin.Flag("k8s-login-path", "Vault path to authenticate against").Default(os.Getenv("K8S_LOGIN_PATH")).String()
 	k8sAuthRole         = kingpin.Flag("k8s-auth-role", "Kubernetes authentication role").String()
 
-	// Sidecar options
-	shutdownTriggerFile = kingpin.Flag("shutdown-trigger-file", "When running as a daemon, the presence of this file will cause the daemon to stop").String()
-	renewInterval       = kingpin.Flag("renew-interval", "Interval to renew credentials").Default("20m").Duration()
-	safetyThreshold     = kingpin.Flag("renew-safety-threshold", "Proactively renew leases expiring before the next interval, minus this value.").Default("8m").Duration()
-	renewLeaseDuration  = kingpin.Flag("renew-lease-duration", "How long to request leases to be renewed for").Default("1h").Duration()
+	// EC2 Authentication
+	ec2Auth      = kingpin.Flag("ec2-auth", "Use EC2 metadata to authenticate to Vault").Default("false").Bool()
+	ec2Role      = kingpin.Flag("ec2-auth-role", "Override the rolename used to authenticate to Vault.").String()
+	ec2AuthTest  = kingpin.Flag("ec2-auth-test", "Perform a test authentication and print out the returned token and nonce.").Default("false").Bool()
+	ec2LoginPath = kingpin.Flag("ec2-login-path", "Vault path to authenticate against").Default(util.VaultEC2AuthPath).String()
 
 	// Shared options
 	debug         = kingpin.Flag("debug", "Log at debug level").Default("false").Bool()
@@ -56,304 +42,12 @@ var (
 	neverScrub             = kingpin.Flag("never-scrub", "Don't delete outputted files if the tool fails").Default("false").Bool()
 )
 
-func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
-
-	threshold := time.Now().Add(*renewInterval).Add(*safetyThreshold)
-	jww.DEBUG.Printf("Will renew all credentials expiring before %v", threshold)
-
-	jww.DEBUG.Printf("Auth token: expires? %v at %v", leases.Current.AuthTokenLease.CanExpire, leases.Current.AuthTokenLease.ExpiresAt)
-	// Does our authentication token expire soon?
-	if leases.Current.AuthTokenLease.CanExpire {
-		if leases.Current.AuthTokenLease.ExpiresAt.Before(threshold) {
-
-			err := vaultClient.RenewSelf(ctx, *renewLeaseDuration)
-
-			if err != nil {
-				jww.ERROR.Printf("error renewing authentication token: %v", err)
-			}
-
-			// If the error is a permission denied, then it will never be renewed, so we're hooped.
-			if err == vaultclient.ErrPermissionDenied {
-				scrubber.RemoveFiles()
-				jww.FATAL.Fatalf("Authentication token could no longer be renewed.")
-			}
-		}
-	}
-
-	for _, awsLease := range leases.Current.AWSCredentialLeases {
-		jww.DEBUG.Printf("AWS credential for %q expires at: %v", awsLease.AWSCredential.OutputPath, awsLease.Expiry)
-
-		//If an AWS credential lease is going to expire, assume all of them are and rewrite all of them
-		//All of our AWS credentials should have the same expiry, as STS expires them after an hour and
-		//we wrote all of them at the same time in the init task
-		if awsLease.Expiry.Before(threshold) {
-			if err := aws.WriteCredentials(currentConfig, vaultClient.Delegate); err != nil {
-				jww.FATAL.Fatalf("Could not write AWS credentials to replace expiring credentials: %v", err)
-			}
-			break
-		}
-	}
-
-	for _, sshLease := range leases.Current.SSHCertificates {
-		certificateFilename := filepath.Join(sshLease.OutputPath, sshsigning.SSHCertificate)
-		validBefore, err := sshsigning.ReadCertificateValidBefore(certificateFilename)
-
-		if err != nil {
-			jww.ERROR.Printf("could not get expiry date for SSH certificate %q: %v", certificateFilename, err)
-			continue
-		}
-
-		jww.DEBUG.Printf("SSH certificate %q is valid before %v", certificateFilename, validBefore)
-
-		// If the cert expires before "threshold" o'clock, then we should renew it. If renewing
-		// fails, then there are three outcomes. 1) fails because of permission denied, in which case we exit
-		// 2) fails because of another reason, but is still not expired (in which case we log, but keep going), or
-		// 3) fails because of another reason, but the ssh certificate is now invalid, in which case we exit.
-		if validBefore != uint64(ssh.CertTimeInfinity) && validBefore < uint64(threshold.Unix()) {
-			err := sshsigning.SignKey(vaultClient.Delegate, sshLease.OutputPath, sshLease.VaultMount, sshLease.VaultRole)
-
-			if errwrap.Contains(err, "Code: 403") {
-				jww.FATAL.Fatalf("Permission denied renewing SSH certificate %q.", certificateFilename)
-			} else {
-				if validBefore < uint64(time.Now().Unix()) {
-					jww.FATAL.Fatalf("Could not renew SSH lease for %q and it has expired: %v", certificateFilename, err)
-				}
-				jww.ERROR.Printf("Error renewing SSH lease for %q: %v", certificateFilename, err)
-			}
-		}
-	}
-}
-
-func performCleanup() {
-	jww.INFO.Print("Performing cleanup.")
-	leases.ReadFile()
-
-	if len(leases.Current.ManagedFiles) > 0 {
-		scrubber.AddFile(leases.Current.ManagedFiles...)
-	}
-
-	scrubber.AddFile(*leasesFile)
-	scrubber.RemoveFiles()
-}
-
-func emptySidecar() {
-
-	jww.INFO.Print("There are not secrets in Vault to maintain. Sidecar idle.")
-	ctx, cancel := context.WithCancel(context.Background())
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	signal.Notify(c, syscall.SIGTERM)
-
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				jww.INFO.Printf("stopping renewal")
-				return
-			}
-		}
-	}()
-
-	<-c
-
-	jww.INFO.Printf("Shutting down.")
-
-	cancel()
-
-}
-
-func performSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
-
-	if currentConfig.IsEmpty() {
-		if *oneShotFlag {
-			return
-		} else {
-			emptySidecar()
-			return
-		}
-	}
-
-	leases.ReadFile()
-
-	if len(leases.Current.ManagedFiles) > 0 {
-		scrubber.AddFile(leases.Current.ManagedFiles...)
-	}
-
-	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
-		k8sLoginPath,
-		k8sAuthRole,
-		vaultTokenArg)
-
-	err := vaultClient.Authenticate()
-
-	if err != nil {
-		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	if *oneShotFlag {
-		renewLeases(ctx, currentConfig, vaultClient)
-		// If the one shot didn't fatal, then it worked, so don't scrub anything on exit.
-		scrubber.DisableExitScrubber()
-	} else {
-		defer vaultClient.RevokeSelf()
-		performPeriodicSidecar(ctx, currentConfig, vaultClient)
-		cancel()
-	}
-}
-
-func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	signal.Notify(c, syscall.SIGTERM)
-
-	go func() {
-
-		jww.DEBUG.Printf("Performing auto renewal check on startup.")
-
-		renewLeases(ctx, currentConfig, vaultClient)
-
-		renewTicks := time.Tick(*renewInterval)
-
-		jobCompletionTicks := time.Tick(18 * time.Second)
-
-		var checkKubeAPITicks <-chan time.Time
-
-		jww.INFO.Printf("Lease renewal interval %v, completion check 10s", *renewInterval)
-		for {
-			select {
-			case <-ctx.Done():
-				jww.INFO.Printf("stopping renewal")
-				return
-			case <-renewTicks:
-				jww.INFO.Printf("Renewal Heartbeat")
-				renewLeases(ctx, currentConfig, vaultClient)
-			case <-checkKubeAPITicks:
-				// @TODO
-				jww.INFO.Printf("Performing live check again Kubernetes API")
-				// call API to get status
-				var status string
-				var err error
-
-				status = "Running"
-				err = nil
-
-				if err != nil {
-					jww.ERROR.Printf("error getting pod status: %s", err)
-				}
-				if status == "Error" {
-					jww.FATAL.Fatalf("primary container has errored, shutting down")
-				}
-				if status == "Completed" {
-					jww.INFO.Printf("received completion signal")
-					c <- os.Interrupt
-				}
-			case <-jobCompletionTicks:
-				if *shutdownTriggerFile != "" {
-					jww.INFO.Printf("Performing completion check against %q", *shutdownTriggerFile)
-					if _, err := os.Stat(*shutdownTriggerFile); err == nil {
-						jww.INFO.Printf("Completion file %q present. Exiting", *shutdownTriggerFile)
-						c <- os.Interrupt
-					}
-				}
-			}
-		}
-	}()
-
-	<-c
-	jww.INFO.Printf("Shutting down.")
-}
-
-func calculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string) string {
-
-	if serviceSecretPrefix != nil {
-		return *serviceSecretPrefix
-	}
-
-	if currentConfig.ConfigVersion < 2 {
-		return "/secret/application-config/services/"
-	} else {
-		return "/kv/data/application-config/services/"
-	}
-
-}
-
-func performInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg *string) {
-
-	jww.DEBUG.Print("Performing init tasks.")
-
-	if currentConfig.IsEmpty() {
-		jww.INFO.Print("Configuration file is empty. Writing empty lease file and skipping authentication.")
-		leases.WriteFile()
-		scrubber.DisableExitScrubber()
-		return
-	}
-
-	// Read templates first so we don't waste Vault's time if there's an issue.
-	if err := ingestTemplates(currentConfig); err != nil {
-		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
-	}
-
-	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
-		k8sLoginPath,
-		k8sAuthRole,
-		vaultTokenArg)
-
-	err := vaultClient.Authenticate()
-
-	if err != nil {
-		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
-	}
-
-	token, err := vaultClient.GetTokenID()
-	if err != nil {
-		jww.FATAL.Fatalf("Could not extract Vault Token: %v", err)
-	}
-
-	leases.EnrollAuthToken(vaultClient.AuthToken)
-
-	kvSecrets := vaultClient.ReadKVSecrets(currentConfig)
-
-	// Output necessary files
-	if err := vaultclient.WriteToken(currentConfig, token); err != nil {
-		jww.FATAL.Fatalf("Could not write vault token: %v", err)
-	}
-
-	if err := kv.WriteOutput(currentConfig, kvSecrets); err != nil {
-		jww.FATAL.Fatalf("Could not write KV secrets: %v", err)
-	}
-
-	if err := writeTemplates(currentConfig, kvSecrets); err != nil {
-		jww.FATAL.Fatalf("Could not write templates: %v", err)
-	}
-
-	if err := aws.WriteCredentials(currentConfig, vaultClient.Delegate); err != nil {
-		jww.FATAL.Fatalf("Could not write AWS credentials: %v", err)
-	}
-
-	if err := sshsigning.WriteKeys(currentConfig, vaultClient.Delegate); err != nil {
-		jww.FATAL.Fatalf("Could not setup SSH certificate: %v", err)
-	}
-
-	scrubber.EnrollScrubFiles()
-
-	leases.WriteFile()
-
-	jww.DEBUG.Print("All initialization tasks completed.")
-	scrubber.DisableExitScrubber()
-}
-
 func checkArgs() {
 	actions := 0
-	if *initFlag {
+	if util.Flags.PerformInit {
 		actions++
 
-		if *oneShotFlag == true {
+		if util.Flags.PerformOneShot == true {
 			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
 		}
 	}
@@ -364,13 +58,17 @@ func checkArgs() {
 
 	if *cleanupFlag {
 		actions++
-		if *oneShotFlag == true {
+		if util.Flags.PerformOneShot == true {
 			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
 		}
 	}
 
+	if *ec2AuthTest {
+		actions++
+	}
+
 	if actions != 1 {
-		jww.FATAL.Fatalf("Specify exactly one of --init, --sidecar, or --cleanup flags.")
+		jww.FATAL.Fatalf("Specify exactly one of --init, --sidecar, --cleanup, or --ec2-auth-test flags.")
 	}
 }
 
@@ -386,14 +84,32 @@ func setupLogging() {
 	}
 }
 
-func main() {
+func processArgs() {
+	kingpin.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&util.Flags.PerformInit)
+	kingpin.Flag("renew-interval", "Interval to renew credentials").Default("20m").DurationVar(&util.Flags.RenewInterval)
+	kingpin.Flag("leases-file", "Full path to file to write with leases.").Default("/tmp/vault-leases/vault-ctrl-tool.leases").StringVar(&util.Flags.LeasesFile)
+	kingpin.Flag("shutdown-trigger-file", "When running as a daemon, the presence of this file will cause the daemon to stop").StringVar(&util.Flags.ShutdownTriggerFile)
+	kingpin.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").BoolVar(&util.Flags.PerformOneShot)
+
+	// Sidecar options
+	kingpin.Flag("renew-safety-threshold", "Proactively renew leases expiring before the next interval, minus this value.").Default("8m").DurationVar(&util.Flags.SafetyThreshold)
+	kingpin.Flag("renew-lease-duration", "How long to request leases to be renewed for").Default("1h").DurationVar(&util.Flags.RenewLeaseDuration)
 
 	kingpin.Parse()
 
 	checkArgs()
+}
+
+func main() {
+
+	processArgs()
+
+	if *ec2AuthTest == true {
+		activity.PerformEC2AuthTest()
+		return
+	}
 
 	util.SetPrefixes(inputPrefix, outputPrefix)
-	leases.SetLeasesFile(leasesFile)
 	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
 
 	setupLogging()
@@ -401,7 +117,7 @@ func main() {
 	jww.INFO.Printf("Tool Starting.")
 
 	if *cleanupFlag {
-		performCleanup()
+		activity.PerformCleanup()
 		return
 	}
 
@@ -422,8 +138,8 @@ func main() {
 		jww.FATAL.Printf("Could not read config file %v: %v", configFile, err)
 	}
 
-	if *initFlag {
-		performInitTasks(*currentConfig, serviceAccountToken,
+	if util.Flags.PerformInit {
+		activity.PerformInitTasks(*currentConfig, serviceAccountToken,
 			serviceSecretPrefix,
 			k8sLoginPath,
 			k8sAuthRole,
@@ -431,9 +147,9 @@ func main() {
 	} else if *sidecarFlag {
 
 		if currentConfig.IsEmpty() {
-			emptySidecar()
+			activity.EmptySidecar()
 		} else {
-			performSidecar(*currentConfig, serviceAccountToken,
+			activity.PerformSidecar(*currentConfig, serviceAccountToken,
 				serviceSecretPrefix,
 				k8sLoginPath,
 				k8sAuthRole,

@@ -1,20 +1,32 @@
-package main
+package activity
 
 import (
 	"fmt"
-	"os"
-	"text/template"
-
+	"github.com/hashicorp/errwrap"
+	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
-
-	"github.com/hashicorp/errwrap"
-	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
+	"os"
+	"text/template"
 )
 
 var templates = make(map[string]*template.Template)
+
+func calculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string) string {
+
+	if serviceSecretPrefix != nil {
+		return *serviceSecretPrefix
+	}
+
+	if currentConfig.ConfigVersion < 2 {
+		return util.SecretsServicePath_V1
+	} else {
+		return util.SecretsServicePath_V2
+	}
+
+}
 
 func ingestTemplates(currentConfig cfg.Config) error {
 
@@ -73,7 +85,7 @@ func writeTemplates(currentConfig cfg.Config, kvSecrets map[string]api.Secret) e
 			return errwrap.Wrapf(fmt.Sprintf("failed to write template %q: {{err}}", tpl.Output), err)
 		}
 
-		file.Close()
+		_ = file.Close()
 
 		jww.DEBUG.Printf("Done executing template %q", tpl.Output)
 	}
