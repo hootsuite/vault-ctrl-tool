@@ -52,9 +52,9 @@ func (vc *VaultClient) fetchPKCS7() (string, error) {
 func (vc *VaultClient) performEC2Auth() error {
 
 	type login struct {
-		role  string `json:"role"`
-		pkcs7 string `json:"pkcs7"`
-		nonce string `json:"nonce,omitempty"`
+		Role  string `json:"role"`
+		Pkcs7 string `json:"pkcs7"`
+		Nonce string `json:"nonce,omitempty"`
 	}
 
 	pkcs7, err := vc.fetchPKCS7()
@@ -71,16 +71,18 @@ func (vc *VaultClient) performEC2Auth() error {
 		return err
 	}
 
-	jww.DEBUG.Printf("Deteremined AMI is %q.", ami)
+	jww.DEBUG.Printf("Looked up AMI is %q.", ami)
 
 	req := vc.Delegate.NewRequest("POST", util.VaultEC2AuthPath)
-	err = req.SetJSONBody(&login{role: ami, pkcs7: pkcs7})
+
+	authValues := login{Role: ami, Pkcs7: pkcs7, Nonce: util.Flags.EC2VaultNonce}
+	err = req.SetJSONBody(authValues)
 
 	if err != nil {
 		return err
 	}
 
-	jww.DEBUG.Printf("Sending EC2 Auth request: %v", req)
+	jww.DEBUG.Printf("Sending EC2 Auth request to %q", req.URL)
 
 	resp, err := vc.Delegate.RawRequest(req)
 	if err != nil {

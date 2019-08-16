@@ -89,6 +89,7 @@ func processArgs() {
 	kingpin.Flag("ec2-auth", "Use EC2 metadata to authenticate to Vault").Default("false").BoolVar(&util.Flags.EC2AuthEnabled)
 	kingpin.Flag("ec2-auth-role", "Override the rolename used to authenticate to Vault.").StringVar(&util.Flags.EC2AuthRole)
 	kingpin.Flag("ec2-login-path", "Vault path to authenticate against").Default(util.VaultEC2AuthPath).StringVar(&util.Flags.EC2VaultAuthPath)
+	kingpin.Flag("ec2-vault-nonce", "Nonce to use if re-authenticating.").Default("").StringVar(&util.Flags.EC2VaultNonce)
 
 	kingpin.Parse()
 

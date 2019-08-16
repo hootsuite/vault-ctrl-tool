@@ -16,6 +16,7 @@ type CliFlags struct {
 	EC2AuthEnabled      bool
 	EC2AuthRole         string
 	EC2VaultAuthPath    string
+	EC2VaultNonce       string
 }
 
 var Flags CliFlags
