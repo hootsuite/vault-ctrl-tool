@@ -8,6 +8,7 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/leases"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
+	"gopkg.in/alecthomas/kingpin.v2"
 	jww "github.com/spf13/jwalterweatherman"
 )
 
