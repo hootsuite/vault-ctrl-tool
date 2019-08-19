@@ -99,9 +99,11 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 
 		renewLeases(ctx, currentConfig, vaultClient)
 
-		renewTicks := time.Tick(util.Flags.RenewInterval)
+		renewTicker := time.NewTicker(util.Flags.RenewInterval)
+		defer renewTicker.Stop()
 
-		jobCompletionTicks := time.Tick(18 * time.Second)
+		jobCompletionTicker := time.NewTicker(18 * time.Second)
+		defer jobCompletionTicker.Stop()
 
 		var checkKubeAPITicks <-chan time.Time
 
@@ -111,7 +113,7 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 			case <-ctx.Done():
 				jww.INFO.Printf("stopping renewal")
 				return
-			case <-renewTicks:
+			case <-renewTicker.C:
 				jww.INFO.Printf("Renewal Heartbeat")
 				renewLeases(ctx, currentConfig, vaultClient)
 			case <-checkKubeAPITicks:
@@ -134,7 +136,7 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 					jww.INFO.Printf("received completion signal")
 					c <- os.Interrupt
 				}
-			case <-jobCompletionTicks:
+			case <-jobCompletionTicker.C:
 				if util.Flags.ShutdownTriggerFile != "" {
 					jww.INFO.Printf("Performing completion check against %q", util.Flags.ShutdownTriggerFile)
 					if _, err := os.Stat(util.Flags.ShutdownTriggerFile); err == nil {
@@ -152,13 +154,12 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 
 func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole *string) {
 
+	// handle if there's actually no work to do.
 	if currentConfig.IsEmpty() {
-		if util.Flags.PerformOneShot {
-			return
-		} else {
+		if !util.Flags.PerformOneShot {
 			EmptySidecar()
-			return
 		}
+		return
 	}
 
 	leases.ReadFile()
@@ -184,6 +185,7 @@ func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 		renewLeases(ctx, currentConfig, vaultClient)
 		// If the one shot didn't fatal, then it worked, so don't scrub anything on exit.
 		scrubber.DisableExitScrubber()
+		cancel()
 	} else {
 		defer vaultClient.RevokeSelf()
 		performPeriodicSidecar(ctx, currentConfig, vaultClient)

@@ -40,7 +40,7 @@ func checkArgs() {
 	if util.Flags.PerformInit {
 		actions++
 
-		if util.Flags.PerformOneShot == true {
+		if util.Flags.PerformOneShot {
 			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
 		}
 	}
@@ -51,7 +51,7 @@ func checkArgs() {
 
 	if *cleanupFlag {
 		actions++
-		if util.Flags.PerformOneShot == true {
+		if util.Flags.PerformOneShot {
 			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
 		}
 	}

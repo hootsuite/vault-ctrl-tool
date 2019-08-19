@@ -38,7 +38,7 @@ type LeasedAWSCredential struct {
 	Expiry        time.Time   `json:"expiry"`
 }
 
-// Contains all the runtime data needed for the tool to manage leases in sidecar mode.
+// Current contains all the runtime data needed for the tool to manage leases in sidecar mode.
 var Current Leases
 
 var ignoreNonRenewableAuth bool
