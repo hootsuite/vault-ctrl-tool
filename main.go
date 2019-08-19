@@ -58,7 +58,7 @@ func checkArgs() {
 	}
 
 	if actions != 1 {
-		jww.FATAL.Fatalf("Specify exactly one of --init, --sidecar, --cleanup, or --ec2-auth-test flags.")
+		jww.FATAL.Fatalf("Specify exactly one of --init, --sidecar, or --cleanup flags.")
 	}
 }
 
