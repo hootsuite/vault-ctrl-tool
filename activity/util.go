@@ -2,14 +2,15 @@ package activity
 
 import (
 	"fmt"
+	"os"
+	"text/template"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
-	"os"
-	"text/template"
 )
 
 var templates = make(map[string]*template.Template)

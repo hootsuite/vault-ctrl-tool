@@ -2,13 +2,14 @@ package vaultclient
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"net/http"
+	"strings"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
-	"io/ioutil"
-	"net/http"
-	"strings"
 )
 
 func (vc *VaultClient) fetchAMI() (string, error) {

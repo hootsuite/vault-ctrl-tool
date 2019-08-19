@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/util"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/util"
 
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/leases"

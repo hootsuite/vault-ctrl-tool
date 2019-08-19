@@ -3,10 +3,11 @@ package vaultclient
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
-	"io/ioutil"
 )
 
 func (vc *VaultClient) performKubernetesAuth() error {

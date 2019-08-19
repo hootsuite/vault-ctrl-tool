@@ -2,6 +2,12 @@ package activity
 
 import (
 	"context"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
 	"github.com/hashicorp/errwrap"
 	"github.com/hootsuite/vault-ctrl-tool/aws"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
@@ -12,11 +18,6 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 	jww "github.com/spf13/jwalterweatherman"
 	"golang.org/x/crypto/ssh"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
-	"time"
 )
 
 func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
