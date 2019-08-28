@@ -187,7 +187,7 @@ func EmptySidecar() {
 		for {
 			select {
 			case <-ctx.Done():
-				jww.INFO.Printf("stopping renewal")
+				jww.INFO.Printf("Idle sidecar exiting.")
 				return
 			}
 		}
