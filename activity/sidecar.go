@@ -107,122 +107,115 @@ func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaul
 			}
 		}
 	}
+}
 
-	func
-	performPeriodicSidecar(ctx
-	context.Context, currentConfig
-	cfg.Config, vaultClient
-	vaultclient.VaultClient) {
+func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
 
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
-		signal.Notify(c, syscall.SIGTERM)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM)
 
-		go func() {
+	go func() {
 
-			jww.DEBUG.Printf("Performing auto renewal check on startup.")
+		jww.DEBUG.Printf("Performing auto renewal check on startup.")
 
-			renewLeases(ctx, currentConfig, vaultClient)
+		renewLeases(ctx, currentConfig, vaultClient)
 
-			renewTicker := time.NewTicker(util.Flags.RenewInterval)
-			defer renewTicker.Stop()
+		renewTicker := time.NewTicker(util.Flags.RenewInterval)
+		defer renewTicker.Stop()
 
-			jobCompletionTicker := time.NewTicker(ShutdownFileCheckFrequency)
-			defer jobCompletionTicker.Stop()
+		jobCompletionTicker := time.NewTicker(ShutdownFileCheckFrequency)
+		defer jobCompletionTicker.Stop()
 
-			jww.INFO.Printf("Lease renewal interval %v, completion check 10s", util.Flags.RenewInterval)
-			for {
-				select {
-				case <-ctx.Done():
-					jww.INFO.Printf("stopping renewal")
-					return
-				case <-renewTicker.C:
-					jww.INFO.Printf("Renewal Heartbeat")
-					renewLeases(ctx, currentConfig, vaultClient)
-				case <-jobCompletionTicker.C:
-					if util.Flags.ShutdownTriggerFile != "" {
-						jww.INFO.Printf("Performing completion check against %q", util.Flags.ShutdownTriggerFile)
-						if _, err := os.Stat(util.Flags.ShutdownTriggerFile); err == nil {
-							jww.INFO.Printf("Completion file %q present. Exiting", util.Flags.ShutdownTriggerFile)
-							c <- os.Interrupt
-						}
+		jww.INFO.Printf("Lease renewal interval %v, completion check 10s", util.Flags.RenewInterval)
+		for {
+			select {
+			case <-ctx.Done():
+				jww.INFO.Printf("stopping renewal")
+				return
+			case <-renewTicker.C:
+				jww.INFO.Printf("Renewal Heartbeat")
+				renewLeases(ctx, currentConfig, vaultClient)
+			case <-jobCompletionTicker.C:
+				if util.Flags.ShutdownTriggerFile != "" {
+					jww.INFO.Printf("Performing completion check against %q", util.Flags.ShutdownTriggerFile)
+					if _, err := os.Stat(util.Flags.ShutdownTriggerFile); err == nil {
+						jww.INFO.Printf("Completion file %q present. Exiting", util.Flags.ShutdownTriggerFile)
+						c <- os.Interrupt
 					}
 				}
 			}
-		}()
+		}
+	}()
 
-		<-c
-		jww.INFO.Printf("Shutting down.")
+	<-c
+	jww.INFO.Printf("Shutting down.")
+}
+
+func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole *string) {
+
+	// handle if there's actually no work to do.
+	if currentConfig.IsEmpty() {
+		if !util.Flags.PerformOneShot {
+			EmptySidecar()
+		}
+		return
 	}
 
-	func
-	PerformSidecar(currentConfig
-	cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole * string) {
+	leases.ReadFile()
 
-		// handle if there's actually no work to do.
-		if currentConfig.IsEmpty() {
-			if !util.Flags.PerformOneShot {
-				EmptySidecar()
-			}
-			return
-		}
-
-		leases.ReadFile()
-
-		if len(leases.Current.ManagedFiles) > 0 {
-			scrubber.AddFile(leases.Current.ManagedFiles...)
-		}
-
-		vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-			calculateSecretPrefix(currentConfig, serviceSecretPrefix),
-			k8sLoginPath,
-			k8sAuthRole)
-
-		err := vaultClient.Authenticate()
-
-		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		if util.Flags.PerformOneShot {
-			renewLeases(ctx, currentConfig, vaultClient)
-			// If the one shot didn't fatal, then it worked, so don't scrub anything on exit.
-			scrubber.DisableExitScrubber()
-			cancel()
-		} else {
-			defer vaultClient.RevokeSelf()
-			performPeriodicSidecar(ctx, currentConfig, vaultClient)
-			cancel()
-		}
+	if len(leases.Current.ManagedFiles) > 0 {
+		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	func
-	EmptySidecar()
-	{
+	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
+		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
+		k8sLoginPath,
+		k8sAuthRole)
 
-		jww.INFO.Print("There are not secrets in Vault to maintain. Sidecar idle.")
-		ctx, cancel := context.WithCancel(context.Background())
+	err := vaultClient.Authenticate()
 
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
-		signal.Notify(c, syscall.SIGTERM)
+	if err != nil {
+		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
+	}
 
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					jww.INFO.Printf("Idle sidecar exiting.")
-					return
-				}
-			}
-		}()
+	ctx, cancel := context.WithCancel(context.Background())
 
-		<-c
-
-		jww.INFO.Printf("Shutting down.")
-
+	if util.Flags.PerformOneShot {
+		renewLeases(ctx, currentConfig, vaultClient)
+		// If the one shot didn't fatal, then it worked, so don't scrub anything on exit.
+		scrubber.DisableExitScrubber()
 		cancel()
-
+	} else {
+		defer vaultClient.RevokeSelf()
+		performPeriodicSidecar(ctx, currentConfig, vaultClient)
+		cancel()
 	}
+}
+
+func EmptySidecar() {
+
+	jww.INFO.Print("There are not secrets in Vault to maintain. Sidecar idle.")
+	ctx, cancel := context.WithCancel(context.Background())
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				jww.INFO.Printf("Idle sidecar exiting.")
+				return
+			}
+		}
+	}()
+
+	<-c
+
+	jww.INFO.Printf("Shutting down.")
+
+	cancel()
+
+}
