@@ -20,6 +20,8 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const ShutdownFileCheckFrequency = 18 * time.Second
+
 func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
 
 	threshold := time.Now().Add(util.Flags.RenewInterval).Add(util.Flags.SafetyThreshold)
@@ -47,9 +49,9 @@ func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaul
 	for _, awsLease := range leases.Current.AWSCredentialLeases {
 		jww.DEBUG.Printf("AWS credential for %q expires at: %v", awsLease.AWSCredential.OutputPath, awsLease.Expiry)
 
-		//If an AWS credential lease is going to expire, assume all of them are and rewrite all of them
-		//All of our AWS credentials should have the same expiry, as STS expires them after an hour and
-		//we wrote all of them at the same time in the init task
+		// If an AWS credential lease is going to expire, assume all of them are and rewrite all of them
+		// All of our AWS credentials should have the same expiry, as STS expires them after an hour and
+		// we wrote all of them at the same time in the init task
 		if awsLease.Expiry.Before(threshold) {
 			if err := aws.WriteCredentials(currentConfig, vaultClient.Delegate); err != nil {
 				jww.FATAL.Fatalf("Could not write AWS credentials to replace expiring credentials: %v", err)
@@ -103,10 +105,8 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 		renewTicker := time.NewTicker(util.Flags.RenewInterval)
 		defer renewTicker.Stop()
 
-		jobCompletionTicker := time.NewTicker(18 * time.Second)
+		jobCompletionTicker := time.NewTicker(ShutdownFileCheckFrequency)
 		defer jobCompletionTicker.Stop()
-
-		var checkKubeAPITicks <-chan time.Time
 
 		jww.INFO.Printf("Lease renewal interval %v, completion check 10s", util.Flags.RenewInterval)
 		for {
@@ -117,26 +117,6 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 			case <-renewTicker.C:
 				jww.INFO.Printf("Renewal Heartbeat")
 				renewLeases(ctx, currentConfig, vaultClient)
-			case <-checkKubeAPITicks:
-				// @TODO
-				jww.INFO.Printf("Performing live check again Kubernetes API")
-				// call API to get status
-				var status string
-				var err error
-
-				status = "Running"
-				err = nil
-
-				if err != nil {
-					jww.ERROR.Printf("error getting pod status: %s", err)
-				}
-				if status == "Error" {
-					jww.FATAL.Fatalf("primary container has errored, shutting down")
-				}
-				if status == "Completed" {
-					jww.INFO.Printf("received completion signal")
-					c <- os.Interrupt
-				}
 			case <-jobCompletionTicker.C:
 				if util.Flags.ShutdownTriggerFile != "" {
 					jww.INFO.Printf("Performing completion check against %q", util.Flags.ShutdownTriggerFile)

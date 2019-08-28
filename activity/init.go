@@ -32,9 +32,7 @@ func PerformInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecr
 		k8sLoginPath,
 		k8sAuthRole)
 
-	err := vaultClient.Authenticate()
-
-	if err != nil {
+	if err := vaultClient.Authenticate(); err != nil {
 		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
 	}
 

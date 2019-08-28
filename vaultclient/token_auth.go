@@ -1,7 +1,9 @@
 package vaultclient
 
-import "github.com/hashicorp/vault/api"
-import jww "github.com/spf13/jwalterweatherman"
+import (
+	"github.com/hashicorp/vault/api"
+	jww "github.com/spf13/jwalterweatherman"
+)
 
 func (vc *VaultClient) performTokenAuth(vaultToken string) error {
 
