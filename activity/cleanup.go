@@ -8,7 +8,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func PerformCleanup(vaultClient vaultclient.VaultClient) {
+func PerformCleanup(vc vaultclient.VaultClient) {
 	jww.INFO.Print("Performing cleanup.")
 	leases.ReadFile()
 
@@ -16,7 +16,9 @@ func PerformCleanup(vaultClient vaultclient.VaultClient) {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	vaultClient.RevokeSelf()
+	jww.DEBUG.Print("Attempting to revoke existing Vault token.")
+	vc.Delegate.SetToken(leases.Current.AuthTokenLease.Token)
+	vc.RevokeSelf()
 
 	scrubber.AddFile(util.Flags.LeasesFile)
 	scrubber.RemoveFiles()

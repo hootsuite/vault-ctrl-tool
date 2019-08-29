@@ -2,9 +2,7 @@ package cfg
 
 import (
 	"io/ioutil"
-
 	"github.com/hootsuite/vault-ctrl-tool/util"
-
 	jww "github.com/spf13/jwalterweatherman"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -252,3 +250,4 @@ func ParseFile(configFile *string) (*Config, error) {
 	return &current, nil
 
 }
+
