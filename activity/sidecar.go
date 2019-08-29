@@ -152,7 +152,7 @@ func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vault
 	jww.INFO.Printf("Shutting down.")
 }
 
-func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole *string) {
+func PerformSidecar(currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
 
 	// handle if there's actually no work to do.
 	if currentConfig.IsEmpty() {
@@ -167,11 +167,6 @@ func PerformSidecar(currentConfig cfg.Config, serviceAccountToken, serviceSecret
 	if len(leases.Current.ManagedFiles) > 0 {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
-
-	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
-		k8sLoginPath,
-		k8sAuthRole)
 
 	err := vaultClient.Authenticate()
 

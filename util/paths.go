@@ -1,6 +1,7 @@
 package util
 
 import (
+	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"os"
 	"path"
 	"path/filepath"
@@ -9,6 +10,19 @@ import (
 )
 
 var outputPrefix, inputPrefix string
+
+func CalculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string) string {
+
+	if serviceSecretPrefix != nil {
+		return *serviceSecretPrefix
+	}
+
+	if currentConfig.ConfigVersion < 2 {
+		return SecretsServicePathV1
+	} else {
+		return SecretsServicePathV2
+	}
+}
 
 func SetPrefixes(in, out *string) {
 	if in != nil {

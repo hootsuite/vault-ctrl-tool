@@ -25,19 +25,13 @@ import (
 var ErrPermissionDenied = errors.New("permission denied")
 
 type VaultClient struct {
-	serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole string
-	Delegate                                                            *api.Client
-	AuthToken                                                           *api.Secret
-	Config                                                              *api.Config
-}
-
-func (vc VaultClient) GetTokenID() (string, error) {
-
-	if vc.AuthToken == nil {
-		return "", fmt.Errorf("token is not set")
-	}
-
-	return vc.AuthToken.TokenID()
+	serviceAccountToken string
+	serviceSecretPrefix string
+	k8sLoginPath        string
+	k8sAuthRole         string
+	Delegate            *api.Client
+	AuthToken           *api.Secret
+	Config              *api.Config
 }
 
 func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole *string) VaultClient {
@@ -72,7 +66,16 @@ func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole 
 	return vc
 }
 
-func (vc VaultClient) defaultRetryStrategy(max time.Duration) backoff.BackOff {
+func (vc *VaultClient) GetTokenID() (string, error) {
+
+	if vc.AuthToken == nil {
+		return "", fmt.Errorf("token is not set")
+	}
+
+	return vc.AuthToken.TokenID()
+}
+
+func (vc *VaultClient) defaultRetryStrategy(max time.Duration) backoff.BackOff {
 	strategy := backoff.NewExponentialBackOff()
 	strategy.InitialInterval = time.Millisecond * 500
 	strategy.MaxElapsedTime = max
@@ -83,11 +86,11 @@ func (vc *VaultClient) RevokeSelf() {
 	jww.DEBUG.Printf("Revoking Vault token.")
 	err := vc.Delegate.Auth().Token().RevokeSelf(vc.Delegate.Token())
 	if err != nil {
-		jww.ERROR.Printf("Failed to revoke Vault token. This will leave credentials around in %q Vault: %v", vc.Delegate.Address(), err)
+		jww.ERROR.Printf("Failed to revoke Vault token. This will leave credentials around in %q Vault and potentially prevent reauthentication: %v", vc.Delegate.Address(), err)
 	}
 }
 
-func (vc VaultClient) RenewSelf(ctx context.Context, duration time.Duration) error {
+func (vc *VaultClient) RenewSelf(ctx context.Context, duration time.Duration) error {
 	jww.INFO.Print("Renewing Vault authentication token.")
 	op := func() error {
 		secret, err := vc.Delegate.Auth().Token().RenewSelf(int(duration.Seconds()))
@@ -222,7 +225,7 @@ func (vc *VaultClient) Authenticate() error {
 	return nil
 }
 
-func (vc VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Secret {
+func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Secret {
 
 	var vaultSecretsMapping = make(map[string]api.Secret)
 
@@ -268,7 +271,7 @@ func (vc VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Sec
 	return vaultSecretsMapping
 }
 
-func (vc VaultClient) checkPermissionDenied(err error) bool {
+func (vc *VaultClient) checkPermissionDenied(err error) bool {
 	errorString := fmt.Sprintf("%s", err)
 	return strings.Contains(errorString, "Code: 403")
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 	"os"
 
 	"github.com/hootsuite/vault-ctrl-tool/activity"
@@ -15,7 +16,6 @@ import (
 var (
 	// Mode flags
 	sidecarFlag = kingpin.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").Bool()
-	cleanupFlag = kingpin.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").Bool()
 
 	// Init options
 	configFile          = kingpin.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").String()
@@ -50,7 +50,7 @@ func checkArgs() {
 		actions++
 	}
 
-	if *cleanupFlag {
+	if util.Flags.PerformCleanup {
 		actions++
 		if util.Flags.PerformOneShot {
 			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
@@ -81,6 +81,8 @@ func processArgs() {
 	kingpin.Flag("shutdown-trigger-file", "When running as a daemon, the presence of this file will cause the daemon to stop").StringVar(&util.Flags.ShutdownTriggerFile)
 	kingpin.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").BoolVar(&util.Flags.PerformOneShot)
 
+	kingpin.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").BoolVar(&util.Flags.PerformCleanup)
+
 	// Sidecar options
 	kingpin.Flag("renew-safety-threshold", "Proactively renew leases expiring before the next interval, minus this value.").Default("8m").DurationVar(&util.Flags.SafetyThreshold)
 	kingpin.Flag("renew-lease-duration", "How long to request leases to be renewed for").Default("1h").DurationVar(&util.Flags.RenewLeaseDuration)
@@ -108,8 +110,19 @@ func main() {
 
 	jww.INFO.Printf("Tool Starting.")
 
-	if *cleanupFlag {
-		activity.PerformCleanup()
+	currentConfig, err := cfg.ParseFile(configFile)
+
+	if err != nil {
+		jww.FATAL.Printf("Could not read config file %v: %v", configFile, err)
+	}
+
+	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
+		util.CalculateSecretPrefix(*currentConfig, serviceSecretPrefix),
+		k8sLoginPath,
+		k8sAuthRole)
+
+	if util.Flags.PerformCleanup {
+		activity.PerformCleanup(vaultClient)
 		return
 	}
 
@@ -124,28 +137,18 @@ func main() {
 	defer scrubber.RunExitScrubber()
 	scrubber.SetupExitScrubber()
 
-	currentConfig, err := cfg.ParseFile(configFile)
-
-	if err != nil {
-		jww.FATAL.Printf("Could not read config file %v: %v", configFile, err)
-	}
-
 	if util.Flags.PerformInit {
-		activity.PerformInitTasks(*currentConfig, serviceAccountToken,
-			serviceSecretPrefix,
-			k8sLoginPath,
-			k8sAuthRole)
+
+		activity.PerformInitTasks(*currentConfig, vaultClient)
 
 	} else if *sidecarFlag {
 
 		if currentConfig.IsEmpty() {
 			activity.EmptySidecar()
 		} else {
-			activity.PerformSidecar(*currentConfig, serviceAccountToken,
-				serviceSecretPrefix,
-				k8sLoginPath,
-				k8sAuthRole)
+			activity.PerformSidecar(*currentConfig, vaultClient)
 		}
+
 	}
 
 	jww.INFO.Printf("Tool Finished.")

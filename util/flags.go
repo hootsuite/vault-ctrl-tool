@@ -6,7 +6,7 @@ type CliFlags struct {
 	PerformInit         bool
 	PerformSidecar      bool
 	PerformOneShot      bool
-	Cleanup             bool
+	PerformCleanup      bool
 	RenewInterval       time.Duration
 	LeasesFile          string
 	ShutdownTriggerFile string

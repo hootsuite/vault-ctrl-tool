@@ -15,19 +15,6 @@ import (
 
 var templates = make(map[string]*template.Template)
 
-func calculateSecretPrefix(currentConfig cfg.Config, serviceSecretPrefix *string) string {
-
-	if serviceSecretPrefix != nil {
-		return *serviceSecretPrefix
-	}
-
-	if currentConfig.ConfigVersion < 2 {
-		return util.SecretsServicePathV1
-	} else {
-		return util.SecretsServicePathV2
-	}
-
-}
 
 func ingestTemplates(currentConfig cfg.Config) error {
 

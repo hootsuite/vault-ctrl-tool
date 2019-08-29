@@ -11,7 +11,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func PerformInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole *string) {
+func PerformInitTasks(currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
 
 	jww.DEBUG.Print("Performing init tasks.")
 
@@ -26,11 +26,6 @@ func PerformInitTasks(currentConfig cfg.Config, serviceAccountToken, serviceSecr
 	if err := ingestTemplates(currentConfig); err != nil {
 		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
 	}
-
-	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
-		calculateSecretPrefix(currentConfig, serviceSecretPrefix),
-		k8sLoginPath,
-		k8sAuthRole)
 
 	if err := vaultClient.Authenticate(); err != nil {
 		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
