@@ -2,13 +2,14 @@ package cfg
 
 import (
 	"io/ioutil"
+	"os"
 	"testing"
 )
 
 func TestEmptyFile(t *testing.T) {
 
 	filename := mkConfig(t, "")
-	defer ioutil.ReadFile(filename)
+	defer os.Remove(filename)
 
 	cfg, err := ParseFile(&filename)
 
@@ -25,7 +26,7 @@ func TestEmptyV2(t *testing.T) {
 
 	filename := mkConfig(t, `---
 version: 2`)
-	defer ioutil.ReadFile(filename)
+	defer os.Remove(filename)
 
 	cfg, err := ParseFile(&filename)
 

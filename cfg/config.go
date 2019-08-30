@@ -2,10 +2,10 @@ package cfg
 
 import (
 	"fmt"
-	"io/ioutil"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
 	yaml "gopkg.in/yaml.v2"
+	"io/ioutil"
 )
 
 // VaultTokenType for writing the contents of a VAULT_TOKEN to the specified file with the specified mode.
