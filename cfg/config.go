@@ -1,6 +1,7 @@
 package cfg
 
 import (
+	"fmt"
 	"io/ioutil"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
@@ -84,7 +85,7 @@ func (current Config) IsEmpty() bool {
 }
 
 // Validate the configuration and do any modifications that make the rest of the code easier.
-func prepareConfig(filename string, current *Config) {
+func prepareConfig(filename string, current *Config) error {
 
 	if current.IsEmpty() {
 		jww.WARN.Print("Configuration file lists nothing to output.")
@@ -219,14 +220,16 @@ func prepareConfig(filename string, current *Config) {
 
 	// If we're not happy and we know it, clap^Wfail fatally..
 	if !happy {
-		jww.FATAL.Fatalf("There are issues that need to be resolved with the configuration file at %q", filename)
+		return fmt.Errorf("there are issues that need to be resolved with the configuration file at %q", filename)
+	} else {
+		return nil
 	}
 }
 
 func ParseFile(configFile *string) (*Config, error) {
 
 	if configFile == nil || *configFile == "" {
-		jww.FATAL.Fatalf("A --config file is required to be specified.")
+		return nil, fmt.Errorf("a --config file is required to be specified")
 	}
 
 	absConfigFile := util.AbsoluteInputPath(*configFile)
@@ -234,7 +237,7 @@ func ParseFile(configFile *string) (*Config, error) {
 	yamlFile, err := ioutil.ReadFile(absConfigFile)
 
 	if err != nil {
-		jww.FATAL.Fatalf("Error reading config file %q: %v", absConfigFile, err)
+		return nil, fmt.Errorf("error reading config file %q: %v", absConfigFile, err)
 	}
 
 	var current Config
@@ -242,12 +245,14 @@ func ParseFile(configFile *string) (*Config, error) {
 	err = yaml.Unmarshal(yamlFile, &current)
 
 	if err != nil {
-		jww.FATAL.Fatalf("error unmarshalling config file %q: %v", absConfigFile, err)
+		return nil, fmt.Errorf("error unmarshalling config file %q: %v", absConfigFile, err)
 	}
 
-	prepareConfig(absConfigFile, &current)
+	err = prepareConfig(absConfigFile, &current)
 
-	return &current, nil
-
+	if err != nil {
+		return nil, err
+	} else {
+		return &current, nil
+	}
 }
-
