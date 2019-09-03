@@ -110,21 +110,22 @@ func main() {
 
 	jww.INFO.Printf("Tool Starting.")
 
+
+	if util.Flags.PerformCleanup {
+		activity.PerformCleanup()
+		return
+	}
+
 	currentConfig, err := cfg.ParseFile(configFile)
 
 	if err != nil {
-		jww.FATAL.Printf("Could not read config file %v: %v", configFile, err)
+		jww.FATAL.Fatalf("Could not read config file %s: %v", *configFile, err)
 	}
 
 	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
 		cfg.CalculateSecretPrefix(*currentConfig, serviceSecretPrefix),
 		k8sLoginPath,
 		k8sAuthRole)
-
-	if util.Flags.PerformCleanup {
-		activity.PerformCleanup(vaultClient)
-		return
-	}
 
 	// Exit scrubber deletes files the tool created in the event of it being aborted or
 	// if something goes wrong. The defer (below) takes care of the normal exit, and the setup

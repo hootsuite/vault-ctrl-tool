@@ -84,7 +84,7 @@ func (vc *VaultClient) defaultRetryStrategy(max time.Duration) backoff.BackOff {
 
 func (vc *VaultClient) RevokeSelf() {
 	jww.DEBUG.Printf("Revoking Vault token.")
-	err := vc.Delegate.Auth().Token().RevokeSelf(vc.Delegate.Token())
+	err := vc.Delegate.Auth().Token().RevokeSelf("ignored")
 	if err != nil {
 		jww.ERROR.Printf("Failed to revoke Vault token. This will leave credentials around in %q Vault and potentially prevent reauthentication: %v", vc.Delegate.Address(), err)
 	}
