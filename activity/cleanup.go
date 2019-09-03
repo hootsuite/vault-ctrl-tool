@@ -8,7 +8,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func PerformCleanup() {
+func PerformCleanup(revoke bool) {
 	jww.INFO.Print("Performing cleanup.")
 	leases.ReadFile()
 
@@ -16,7 +16,9 @@ func PerformCleanup() {
 		scrubber.AddFile(leases.Current.ManagedFiles...)
 	}
 
-	revokeCurrentToken()
+	if revoke {
+		revokeCurrentToken()
+	}
 
 	scrubber.AddFile(util.Flags.LeasesFile)
 	scrubber.RemoveFiles()

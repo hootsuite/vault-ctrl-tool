@@ -82,6 +82,7 @@ func processArgs() {
 	kingpin.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").BoolVar(&util.Flags.PerformOneShot)
 
 	kingpin.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").BoolVar(&util.Flags.PerformCleanup)
+	kingpin.Flag("revoke", "During --cleanup, revoke the Vault authentication token.").Default("false").BoolVar(&util.Flags.RevokeOnCleanup)
 
 	// Sidecar options
 	kingpin.Flag("renew-safety-threshold", "Proactively renew leases expiring before the next interval, minus this value.").Default("8m").DurationVar(&util.Flags.SafetyThreshold)
@@ -110,9 +111,8 @@ func main() {
 
 	jww.INFO.Printf("Tool Starting.")
 
-
 	if util.Flags.PerformCleanup {
-		activity.PerformCleanup()
+		activity.PerformCleanup(util.Flags.RevokeOnCleanup)
 		return
 	}
 
