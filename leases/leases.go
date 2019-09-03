@@ -38,10 +38,8 @@ type LeasedAWSCredential struct {
 	Expiry        time.Time   `json:"expiry"`
 }
 
-// Contains all the runtime data needed for the tool to manage leases in sidecar mode.
+// Current contains all the runtime data needed for the tool to manage leases in sidecar mode.
 var Current Leases
-
-var leasesFile *string
 
 var ignoreNonRenewableAuth bool
 
@@ -104,7 +102,7 @@ func EnrollSecret(secret *api.Secret) {
 }
 
 func WriteFile() {
-	jww.DEBUG.Printf("Writing leases file %q", *leasesFile)
+	jww.DEBUG.Printf("Writing leases file %q", util.Flags.LeasesFile)
 	bytes, err := json.Marshal(Current)
 
 	if err != nil {
@@ -113,24 +111,24 @@ func WriteFile() {
 
 	// Create interim directories to lease, just in case.
 
-	util.MakeDirsForFile(*leasesFile)
+	util.MakeDirsForFile(util.Flags.LeasesFile)
 
-	err = ioutil.WriteFile(*leasesFile, bytes, 0600)
+	err = ioutil.WriteFile(util.Flags.LeasesFile, bytes, 0600)
 	if err != nil {
-		jww.FATAL.Fatalf("Failed to write leases file %q: %v", *leasesFile, err)
+		jww.FATAL.Fatalf("Failed to write leases file %q: %v", util.Flags.LeasesFile, err)
 	}
 }
 
 func ReadFile() {
-	jww.INFO.Printf("Reading leases file %q", *leasesFile)
-	bytes, err := ioutil.ReadFile(*leasesFile)
+	jww.INFO.Printf("Reading leases file %q", util.Flags.LeasesFile)
+	bytes, err := ioutil.ReadFile(util.Flags.LeasesFile)
 	if err != nil {
-		jww.FATAL.Fatalf("Failed to read leases file %q: %v", *leasesFile, err)
+		jww.FATAL.Fatalf("Failed to read leases file %q: %v", util.Flags.LeasesFile, err)
 	}
 
 	err = json.Unmarshal(bytes, &Current)
 	if err != nil {
-		jww.FATAL.Fatalf("Failed to unmarshal leases file %q: %v", *leasesFile, err)
+		jww.FATAL.Fatalf("Failed to unmarshal leases file %q: %v", util.Flags.LeasesFile, err)
 	}
 }
 
@@ -140,8 +138,4 @@ func SetIgnoreNonRenewableAuth(ignore *bool) {
 	} else {
 		ignoreNonRenewableAuth = false
 	}
-}
-
-func SetLeasesFile(filename *string) {
-	leasesFile = filename
 }

@@ -76,9 +76,9 @@ func generateKeyPair(outputPath string) error {
 
 }
 
-func WriteKeys(client *api.Client) error {
+func WriteKeys(currentConfig cfg.Config, client *api.Client) error {
 
-	for _, sshConfig := range cfg.Current.SSH {
+	for _, sshConfig := range currentConfig.SSH {
 		if err := generateKeyPair(sshConfig.OutputPath); err != nil {
 			return errwrap.Wrapf("failed to generate SSH keys: {{err}}", err)
 		}

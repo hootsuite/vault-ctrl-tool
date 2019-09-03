@@ -12,9 +12,9 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func WriteToken(vaultToken string) error {
+func WriteToken(currentConfig cfg.Config, vaultToken string) error {
 
-	outputFilename := cfg.Current.VaultToken.Output
+	outputFilename := currentConfig.VaultToken.Output
 
 	if outputFilename == "" {
 		return nil
@@ -22,10 +22,10 @@ func WriteToken(vaultToken string) error {
 
 	jww.INFO.Printf("Writing Vault token to %q", outputFilename)
 
-	mode, err := util.StringToFileMode(cfg.Current.VaultToken.Mode)
+	mode, err := util.StringToFileMode(currentConfig.VaultToken.Mode)
 
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not parse file mode %q for %q: {{err}}", cfg.Current.VaultToken.Mode, outputFilename), err)
+		return errwrap.Wrapf(fmt.Sprintf("could not parse file mode %q for %q: {{err}}", currentConfig.VaultToken.Mode, outputFilename), err)
 	}
 
 	util.MakeDirsForFile(outputFilename)

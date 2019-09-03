@@ -67,6 +67,7 @@ func RemoveFiles() {
 		jww.DEBUG.Print("No files created to scrub.")
 	}
 }
+
 func DisableExitScrubber() {
 	jww.DEBUG.Print("Disabling file scrubber")
 	runScrubber <- false

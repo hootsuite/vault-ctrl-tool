@@ -2,20 +2,19 @@ package vaultclient
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/hootsuite/vault-ctrl-tool/util"
+
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/leases"
 
 	"github.com/cenkalti/backoff"
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,53 +24,79 @@ import (
 
 var ErrPermissionDenied = errors.New("permission denied")
 
-var serviceAccountToken, serviceSecretPrefix, k8sLoginPath, k8sAuthRole, vaultTokenArg string
+type VaultClient struct {
+	serviceAccountToken string
+	serviceSecretPrefix string
+	k8sLoginPath        string
+	k8sAuthRole         string
+	Delegate            *api.Client
+	AuthToken           *api.Secret
+	Config              *api.Config
+}
 
-func ConfigureVaultClient(tokenFile, secretPrefix, loginPath, authRole, tokenArg *string) {
+func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole *string) VaultClient {
+
+	var vc VaultClient
 
 	if tokenFile != nil {
-		serviceAccountToken = *tokenFile
+		vc.serviceAccountToken = *tokenFile
 	}
 
-	if secretPrefix != nil {
-		serviceSecretPrefix = *secretPrefix
-	}
+	vc.serviceSecretPrefix = secretPrefix
+
+	// DefaultConfig will digest VAULT_ environment variables
+	vc.Config = api.DefaultConfig()
 
 	if loginPath != nil {
-		k8sLoginPath = *loginPath
+		vc.k8sLoginPath = *loginPath
 	}
 
 	if authRole != nil {
-		k8sAuthRole = *authRole
+		vc.k8sAuthRole = *authRole
 	}
 
-	if tokenArg != nil {
-		vaultTokenArg = *tokenArg
+	newCli, err := api.NewClient(vc.Config)
+
+	if err != nil {
+		jww.FATAL.Printf("Unable to make a Vault client: %v", err)
 	}
+
+	vc.Delegate = newCli
+
+	return vc
 }
 
-func defaultRetryStrategy(max time.Duration) backoff.BackOff {
+func (vc *VaultClient) GetTokenID() (string, error) {
+
+	if vc.AuthToken == nil {
+		return "", fmt.Errorf("token is not set")
+	}
+
+	return vc.AuthToken.TokenID()
+}
+
+func (vc *VaultClient) defaultRetryStrategy(max time.Duration) backoff.BackOff {
 	strategy := backoff.NewExponentialBackOff()
 	strategy.InitialInterval = time.Millisecond * 500
 	strategy.MaxElapsedTime = max
 	return strategy
 }
 
-func RevokeSelf(client *api.Client) {
+func (vc *VaultClient) RevokeSelf() {
 	jww.DEBUG.Printf("Revoking Vault token.")
-	err := client.Auth().Token().RevokeSelf(client.Token())
+	err := vc.Delegate.Auth().Token().RevokeSelf(vc.Delegate.Token())
 	if err != nil {
-		jww.ERROR.Printf("Failed to revoke Vault token. This will leave credentials around in %q Vault: %v", client.Address(), err)
+		jww.ERROR.Printf("Failed to revoke Vault token. This will leave credentials around in %q Vault and potentially prevent reauthentication: %v", vc.Delegate.Address(), err)
 	}
 }
 
-func RenewSelf(ctx context.Context, client *api.Client, duration time.Duration) error {
+func (vc *VaultClient) RenewSelf(ctx context.Context, duration time.Duration) error {
 	jww.INFO.Print("Renewing Vault authentication token.")
 	op := func() error {
-		secret, err := client.Auth().Token().RenewSelf(int(duration.Seconds()))
+		secret, err := vc.Delegate.Auth().Token().RenewSelf(int(duration.Seconds()))
 		if err != nil {
 			jww.ERROR.Printf("Error renewing authentication token: %v", err)
-			if checkPermissionDenied(err) {
+			if vc.checkPermissionDenied(err) {
 				return backoff.Permanent(ErrPermissionDenied)
 			}
 			return err
@@ -83,78 +108,9 @@ func RenewSelf(ctx context.Context, client *api.Client, duration time.Duration) 
 		return nil
 	}
 
-	err := backoff.Retry(op, backoff.WithContext(defaultRetryStrategy(duration), ctx))
+	err := backoff.Retry(op, backoff.WithContext(vc.defaultRetryStrategy(duration), ctx))
 
 	return err
-}
-
-func performKubernetesAuth() (*api.Client, *api.Secret, error) {
-	type login struct {
-		JWT  string `json:"jwt"`
-		Role string `json:"role"`
-	}
-
-	vaultCfg := api.DefaultConfig()
-	client, err := api.NewClient(vaultCfg)
-	if err != nil {
-		jww.FATAL.Fatalf("Failed to create vault client to %q: %v", client.Address(), err)
-	}
-
-	jww.INFO.Printf("Reading Kubernetes service account token: %q", serviceAccountToken)
-	tokenBytes, err := ioutil.ReadFile(serviceAccountToken)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	jww.INFO.Printf("Authenticating to %q as role %q against %q", k8sLoginPath, k8sAuthRole, vaultCfg.Address)
-
-	req := client.NewRequest("POST", fmt.Sprintf("/v1/auth/%s/login", k8sLoginPath))
-	err = req.SetJSONBody(&login{JWT: string(tokenBytes), Role: k8sAuthRole})
-	if err != nil {
-		return nil, nil, err
-	}
-	resp, err := client.RawRequest(req)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if resp.Error() != nil {
-		return nil, nil, resp.Error()
-	}
-
-	var secret api.Secret
-
-	err = json.NewDecoder(resp.Body).Decode(&secret)
-	if err != nil {
-		return nil, nil, errwrap.Wrapf("error parsing response: {{err}}", err)
-	}
-
-	token, err := secret.TokenID()
-	if err != nil {
-		jww.FATAL.Fatalf("Could not extract Vault Token: %v", err)
-	}
-
-	client.SetToken(token)
-
-	return client, &secret, nil
-}
-
-func performTokenAuth(vaultCfg *api.Config, vaultToken string) (*api.Client, *api.Secret, error) {
-	client, err := api.NewClient(vaultCfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	client.SetToken(vaultToken)
-
-	var secret *api.Secret
-	secret, err = client.Auth().Token().LookupSelf()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	jww.DEBUG.Printf("Token authentication to %q succeeded.", vaultCfg.Address)
-	return client, secret, nil
 }
 
 // Authenticate to the Vault server.
@@ -162,39 +118,48 @@ func performTokenAuth(vaultCfg *api.Config, vaultToken string) (*api.Client, *ap
 // 2. Use the token from --vault-token (if used)
 // 3. Use VAULT_TOKEN if set.
 // 4. Use K8s ServiceAccountToken against the k8s auth backend if specified.
-func Authenticate() (*api.Client, *api.Secret, error) {
+func (vc *VaultClient) Authenticate() error {
 
 	// If there is a leases token, use it.
 	if leases.Current.AuthTokenLease.Token != "" {
 
-		// DefaultConfig will digest VAULT_ environment variables
-		vaultCfg := api.DefaultConfig()
-
-		jww.INFO.Printf("Logging into Vault server %q with token from lease", vaultCfg.Address)
-		client, secret, err := performTokenAuth(vaultCfg, leases.Current.AuthTokenLease.Token)
+		jww.INFO.Printf("Logging into Vault server %q with token from lease", vc.Config.Address)
+		err := vc.performTokenAuth(leases.Current.AuthTokenLease.Token)
 
 		if err != nil {
 			jww.FATAL.Fatalf("Failed to authenticate to vault server %q with token in lease file. Leases will not be renewed. Error: %v",
-				vaultCfg.Address, err)
+				vc.Config.Address, err)
 		}
 
-		return client, secret, nil
+		return nil
 	}
 
 	// Check if -vault-token was passed in
 
-	if vaultTokenArg != "" {
+	if util.Flags.VaultTokenArg != "" {
 
-		// DefaultConfig will digest VAULT_ environment variables
-		vaultCfg := api.DefaultConfig()
+		jww.INFO.Printf("Logging into Vault server %q with command line token.", vc.Config.Address)
 
-		jww.INFO.Printf("Logging into Vault server %q with command line token.", vaultCfg.Address)
+		err := vc.performTokenAuth(util.Flags.VaultTokenArg)
 
-		client, secret, err := performTokenAuth(vaultCfg, vaultTokenArg)
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", vaultCfg.Address, err)
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", vc.Config.Address, err)
 		}
-		return client, secret, nil
+		return nil
+	}
+
+	// If EC2 auth is requested
+
+	if util.Flags.EC2AuthEnabled {
+
+		err := vc.performEC2Auth()
+
+		if err != nil {
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q as an EC2 Instance: %v", vc.Config.Address, err)
+		}
+
+		return nil
+
 	}
 
 	// Otherwise, if VAULT_TOKEN is set, use that.
@@ -203,70 +168,68 @@ func Authenticate() (*api.Client, *api.Secret, error) {
 
 	if vaultToken != "" {
 
-		// DefaultConfig will digest VAULT_ environment variables
-		vaultCfg := api.DefaultConfig()
+		jww.INFO.Printf("Logging into Vault server %q with token in %q", vc.Config.Address, api.EnvVaultToken)
 
-		jww.INFO.Printf("Logging into Vault server %q with token in %q", vaultCfg.Address, api.EnvVaultToken)
-
-		client, secret, err := performTokenAuth(vaultCfg, vaultToken)
+		err := vc.performTokenAuth(vaultToken)
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using %q: %v", vaultCfg.Address,
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using %q: %v", vc.Config.Address,
 				api.EnvVaultToken, err)
 		}
-		return client, secret, nil
+		return nil
 	}
 
 	// Otherwise, if there is a ConfigMap named vault-token in the default namespace, use the token it stores
 
-	config, err := rest.InClusterConfig()
-	// If we cannot create the in cluster config, that means we are not running inside of Kubernetes
-	if err != nil {
-		jww.DEBUG.Print("Could not create cluster config - this will fail if this is running outside of Kubernetes")
-	} else {
-
-		clientset, err := kubernetes.NewForConfig(config)
+	// Developers running Kubernetes clusters locally do not have the ability to have their services authenticate to Vault.
+	// To work around this, the bootstrapping shell scripts for dev clusters create a configmap called "vault-token"
+	// with their Vault token in it. This stanza checks for that special configmap and uses it.
+	if util.EnableKubernetesVaultTokenAuthentication {
+		config, err := rest.InClusterConfig()
+		// If we cannot create the in cluster config, that means we are not running inside of Kubernetes
 		if err != nil {
-			jww.DEBUG.Print("Could not create clientset to call Kubernetes API")
+			jww.DEBUG.Print("Could not create cluster config - this will fail if this is running outside of Kubernetes")
 		} else {
 
-			configMaps, err := clientset.CoreV1().ConfigMaps("default").List(v1.ListOptions{FieldSelector: "metadata.name=vault-token"})
+			clientset, err := kubernetes.NewForConfig(config)
 			if err != nil {
-				jww.DEBUG.Printf("Failed to get configmaps filtered on the name vault-token: %v", err)
-			} else if len(configMaps.Items) == 1 {
-				if token, exists := configMaps.Items[0].Data["token"]; exists {
-					// DefaultConfig will digest VAULT_ environment variables
-					vaultCfg := api.DefaultConfig()
-
-					jww.INFO.Printf("Logging into Vault server %q with token from vault-token ConfigMap.", vaultCfg.Address)
-
-					client, secret, err := performTokenAuth(vaultCfg, token)
-					if err != nil {
-						jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", vaultCfg.Address, err)
-					}
-					return client, secret, nil
-				}
+				jww.DEBUG.Print("Could not create clientset to call Kubernetes API")
 			} else {
-				jww.DEBUG.Print("Damn, multiple configmaps were returned when filtering configmaps with the name vault-token. How did this even happen?")
+				configMaps, err := clientset.CoreV1().ConfigMaps("default").List(v1.ListOptions{FieldSelector: "metadata.name=vault-token"})
+				if err != nil {
+					jww.DEBUG.Printf("Failed to get ConfigMaps filtered on the metadata.name=vault-token: %v", err)
+				} else if len(configMaps.Items) == 1 {
+					if token, exists := configMaps.Items[0].Data["token"]; exists {
+
+						jww.INFO.Printf("Logging into Vault server %q with token from vault-token ConfigMap.", vc.Config.Address)
+
+						err := vc.performTokenAuth(token)
+						if err != nil {
+							jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", vc.Config.Address, err)
+						}
+						return nil
+					}
+				} else {
+					jww.DEBUG.Print("Multiple ConfigMaps were returned when filtering ConfigMaps with metadata.name=vault-token; please remove all but one.")
+				}
 			}
 		}
 	}
 
 	// Lastly, if there's a Kubernetes Auth Role setup, use that...
 
-	if k8sAuthRole != "" {
-		client, secret, err := performKubernetesAuth()
-		return client, secret, err
+	if vc.k8sAuthRole != "" {
+		return vc.performKubernetesAuth()
 	}
 
 	jww.FATAL.Fatalf("No authentication mechanism specified and %q is not set.", api.EnvVaultToken)
-	return nil, nil, nil
+	return nil
 }
 
-func ReadKVSecrets(client *api.Client) map[string]api.Secret {
+func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Secret {
 
 	var vaultSecretsMapping = make(map[string]api.Secret)
 
-	for _, request := range cfg.Current.Secrets {
+	for _, request := range currentConfig.Secrets {
 
 		key := request.Key
 
@@ -275,7 +238,7 @@ func ReadKVSecrets(client *api.Client) map[string]api.Secret {
 		var path string
 
 		if !strings.HasPrefix(request.Path, "/") {
-			path = filepath.Join(serviceSecretPrefix, request.Path)
+			path = filepath.Join(vc.serviceSecretPrefix, request.Path)
 		} else {
 			path = request.Path
 		}
@@ -285,17 +248,17 @@ func ReadKVSecrets(client *api.Client) map[string]api.Secret {
 		}
 
 		jww.DEBUG.Printf("Reading secrets from %q", path)
-		response, err := client.Logical().Read(path)
+		response, err := vc.Delegate.Logical().Read(path)
 
 		if err != nil {
-			jww.FATAL.Fatalf("error fetching secret %q from %q: %v", path, client.Address(), err)
+			jww.FATAL.Fatalf("error fetching secret %q from %q: %v", path, vc.Delegate.Address(), err)
 		}
 
 		if response == nil {
 			if request.IsMissingOk {
 				jww.INFO.Printf("No response reading secrets from %q on path %q (either access is denied "+
 					"or there are no secrets). Ignoring since missingOk is set in the config.",
-					client.Address(), path)
+					vc.Delegate.Address(), path)
 			} else {
 				jww.FATAL.Fatalf("No response returned fetching secrets.")
 			}
@@ -308,7 +271,7 @@ func ReadKVSecrets(client *api.Client) map[string]api.Secret {
 	return vaultSecretsMapping
 }
 
-func checkPermissionDenied(err error) bool {
+func (vc *VaultClient) checkPermissionDenied(err error) bool {
 	errorString := fmt.Sprintf("%s", err)
 	return strings.Contains(errorString, "Code: 403")
 }
