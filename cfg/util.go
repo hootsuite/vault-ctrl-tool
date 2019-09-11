@@ -4,7 +4,7 @@ import "github.com/hootsuite/vault-ctrl-tool/util"
 
 func CalculateSecretPrefix(currentConfig Config, serviceSecretPrefix *string) string {
 
-	if serviceSecretPrefix != nil {
+	if serviceSecretPrefix != nil && *serviceSecretPrefix != "" {
 		return *serviceSecretPrefix
 	}
 
