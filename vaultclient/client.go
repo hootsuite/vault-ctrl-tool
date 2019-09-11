@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/kv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -225,9 +226,9 @@ func (vc *VaultClient) Authenticate() error {
 	return nil
 }
 
-func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Secret {
+func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) []kv.SimpleSecret {
 
-	var vaultSecretsMapping = make(map[string]api.Secret)
+	var simpleSecrets []kv.SimpleSecret
 
 	for _, request := range currentConfig.Secrets {
 
@@ -243,8 +244,11 @@ func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Se
 			path = request.Path
 		}
 
-		if _, ok := vaultSecretsMapping[key]; ok {
-			jww.FATAL.Fatalf("Duplicate secret key %q.", key)
+		// The same key could be in different paths, but we don't allow this because it's confusing.
+		for _, s := range simpleSecrets {
+			if s.Key == key {
+				jww.FATAL.Fatalf("Duplicate secret key %q.", key)
+			}
 		}
 
 		jww.DEBUG.Printf("Reading secrets from %q", path)
@@ -263,12 +267,31 @@ func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) map[string]api.Se
 				jww.FATAL.Fatalf("No response returned fetching secrets.")
 			}
 		} else {
-			leases.EnrollSecret(response)
-			vaultSecretsMapping[key] = *response
+			var secretData map[string]interface{}
+
+			if currentConfig.ConfigVersion < 2 {
+				secretData = response.Data
+			} else {
+				subData, ok := response.Data["data"].(map[string]interface{})
+
+				if ok {
+					secretData = subData
+				} else {
+					secretData = response.Data
+				}
+			}
+
+			for f, v := range secretData {
+				simpleSecrets = append(simpleSecrets, kv.SimpleSecret{
+					Key:   key,
+					Field: f,
+					Value: v,
+				})
+			}
 		}
 	}
 
-	return vaultSecretsMapping
+	return simpleSecrets
 }
 
 func (vc *VaultClient) checkPermissionDenied(err error) bool {

@@ -10,11 +10,16 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/util"
 
 	"github.com/hashicorp/errwrap"
-	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func WriteOutput(currentConfig cfg.Config, kvSecrets map[string]api.Secret) error {
+type SimpleSecret struct {
+	Key   string
+	Field string
+	Value interface{}
+}
+
+func WriteOutput(currentConfig cfg.Config, kvSecrets []SimpleSecret) error {
 
 	secretsToFileMap := make(map[string][]cfg.SecretType)
 	fileToModeMap := make(map[string]os.FileMode)
@@ -30,7 +35,7 @@ func WriteOutput(currentConfig cfg.Config, kvSecrets map[string]api.Secret) erro
 
 		// output all the field files
 		for _, field := range request.Fields {
-			value := kvSecrets[request.Key].Data[field.Name]
+			value := findSimpleSecretValue(kvSecrets, request.Key, field.Name)
 
 			if value == nil {
 
@@ -77,7 +82,17 @@ func WriteOutput(currentConfig cfg.Config, kvSecrets map[string]api.Secret) erro
 	return dumpJSON(kvSecrets, secretsToFileMap, fileToModeMap)
 }
 
-func dumpJSON(kvSecrets map[string]api.Secret, secretsToFileMap map[string][]cfg.SecretType, fileToModeMap map[string]os.FileMode) error {
+func findSimpleSecretValue(secrets []SimpleSecret, key, field string) interface{} {
+	for _, s := range secrets {
+		if s.Key == key && s.Field == field {
+			return s.Value
+		}
+	}
+
+	return nil
+}
+
+func dumpJSON(kvSecrets []SimpleSecret, secretsToFileMap map[string][]cfg.SecretType, fileToModeMap map[string]os.FileMode) error {
 	for filename, secrets := range secretsToFileMap {
 		jww.INFO.Printf("Creating JSON secrets file %q", filename)
 
@@ -109,32 +124,38 @@ func dumpJSON(kvSecrets map[string]api.Secret, secretsToFileMap map[string][]cfg
 	return nil
 }
 
-func collectSecrets(filename string, secrets []cfg.SecretType, kvSecrets map[string]api.Secret) (map[string]interface{}, error) {
+func collectSecrets(filename string, secrets []cfg.SecretType, kvSecrets []SimpleSecret) (map[string]interface{}, error) {
 
 	data := make(map[string]interface{})
 
 	for _, request := range secrets {
 		jww.INFO.Printf("Adding secrets from %q into %q", request.Key, filename)
 		if request.UseKeyAsPrefix {
-			for k, v := range kvSecrets[request.Key].Data {
-				key := request.Key + "_" + k
-				if _, dupe := data[key]; dupe {
-					return nil, fmt.Errorf("the secret key %q with prefix %q causes there to be a duplicate in the file %q",
-						k, request.Key, filename)
+
+			for _, s := range kvSecrets {
+				if s.Key == request.Key {
+					key := request.Key + "_" + s.Field
+					if _, dupe := data[key]; dupe {
+						return nil, fmt.Errorf("the secret field %q with prefix %q causes there to be a duplicate in the file %q",
+							s.Field, request.Key, filename)
+					}
+					jww.DEBUG.Printf("Writing field %q", key)
+					data[key] = s.Value
 				}
-				jww.DEBUG.Printf("Writing key %q", key)
-				data[key] = v
 			}
 		} else {
-			for k, v := range kvSecrets[request.Key].Data {
+			for _, s := range kvSecrets {
+				if s.Key == request.Key {
 
-				if _, dupe := data[k]; dupe {
-					return nil, fmt.Errorf("the secret key %q causes there to be a duplicate in the file %q", k, filename)
+					if _, dupe := data[s.Field]; dupe {
+						return nil, fmt.Errorf("the secret field %q causes there to be a duplicate in the file %q", s.Field, filename)
+					}
+					data[s.Field] = s.Value
+					jww.DEBUG.Printf("Writing field %q", s.Field)
 				}
-				data[k] = v
-				jww.DEBUG.Printf("Writing key %q", k)
 			}
 		}
 	}
+
 	return data, nil
 }

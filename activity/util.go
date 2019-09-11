@@ -2,11 +2,11 @@ package activity
 
 import (
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/kv"
 	"os"
 	"text/template"
 
 	"github.com/hashicorp/errwrap"
-	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
@@ -14,7 +14,6 @@ import (
 )
 
 var templates = make(map[string]*template.Template)
-
 
 func ingestTemplates(currentConfig cfg.Config) error {
 
@@ -34,14 +33,12 @@ func ingestTemplates(currentConfig cfg.Config) error {
 	return nil
 }
 
-func writeTemplates(currentConfig cfg.Config, kvSecrets map[string]api.Secret) error {
+func writeTemplates(currentConfig cfg.Config, kvSecrets []kv.SimpleSecret) error {
 
 	tplVars := make(map[string]interface{})
 
-	for key, secrets := range kvSecrets {
-		for k, v := range secrets.Data {
-			tplVars[key+"_"+k] = v
-		}
+	for _, s := range kvSecrets {
+		tplVars[s.Key+"_"+s.Field] = s.Value
 	}
 
 	for _, tpl := range currentConfig.Templates {

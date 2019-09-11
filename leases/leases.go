@@ -90,17 +90,6 @@ func EnrollAuthToken(authToken *api.Secret) {
 
 }
 
-func EnrollSecret(secret *api.Secret) {
-
-	metadata, err := secret.TokenMetadata()
-	if err != nil {
-		jww.FATAL.Fatalf("Could not fetch metadata for secret: %v", err)
-	}
-
-	jww.INFO.Printf("LeaseID: %v, LeaseDuration: %d, Renewable: %v, Metadata: %v", secret.LeaseID, secret.LeaseDuration, secret.Renewable,
-		metadata)
-}
-
 func WriteFile() {
 	jww.DEBUG.Printf("Writing leases file %q", util.Flags.LeasesFile)
 	bytes, err := json.Marshal(Current)

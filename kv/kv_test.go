@@ -5,8 +5,7 @@ import (
 
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 
-	"github.com/hashicorp/vault/api"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // TestCollectSecrets ensures basic happy path functionality of collectSecrets() works.
@@ -57,25 +56,21 @@ secrets:
 	}
 }
 
-func makeVaultKVSecrets() map[string]api.Secret {
-	vaultSecrets := make(map[string]api.Secret)
-	ex1Secret := make(map[string]interface{})
-	ex1Secret["field1"] = "one"
-	ex1Secret["field2"] = "two"
-	ex1Secret["field3"] = "three"
-	vaultSecrets["ex1"] = api.Secret{Data: ex1Secret}
+func makeVaultKVSecrets() []SimpleSecret {
 
-	ex2Secret := make(map[string]interface{})
-	ex2Secret["fieldA"] = "apples"
-	ex2Secret["fieldB"] = "bananas"
-	ex2Secret["fieldC"] = "cheese"
-	vaultSecrets["ex2"] = api.Secret{Data: ex2Secret}
+	var secrets []SimpleSecret
 
-	ex3Secret := make(map[string]interface{})
-	ex3Secret["fieldRed"] = "red"
-	ex3Secret["fieldGreen"] = "green"
-	ex3Secret["fieldBlue"] = "blue"
-	vaultSecrets["ex3"] = api.Secret{Data: ex3Secret}
+	secrets = append(secrets,
+		SimpleSecret{Key: "ex1", Field: "field1", Value: "one",},
+		SimpleSecret{Key: "ex1", Field: "field2", Value: "two",},
+		SimpleSecret{Key: "ex1", Field: "field3", Value: "three",},
+		SimpleSecret{Key: "ex2", Field: "fieldA", Value: "aye",},
+		SimpleSecret{Key: "ex2", Field: "fieldB", Value: "bee",},
+		SimpleSecret{Key: "ex2", Field: "fieldC", Value: "sea",},
+		SimpleSecret{Key: "ex3", Field: "fieldRed", Value: "red",},
+		SimpleSecret{Key: "ex3", Field: "fieldGreen", Value: "green",},
+		SimpleSecret{Key: "ex3", Field: "fieldBlue", Value: "blue",},
+	)
 
-	return vaultSecrets
+	return secrets
 }
