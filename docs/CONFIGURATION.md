@@ -15,8 +15,9 @@ These examples assume you're running with `--input-prefix /etc/vault-config --ou
 #
 # Write a copy of the token to /etc/secrets/example/target/vault-token - This can be used by your
 # service if you interact with Vault directly and want to take care of keeping your credentials
-# refreshed, etc..   This is useful if you have some use case not covered by the tool and want
-# to interact with Vault directly.
+# refreshed, etc. This is useful if you have some use case not covered by the tool and want
+# to interact with Vault directly. Note that vault-ctrl-tool may rewrite this file if it needs
+# to relogin to Vault when running in sidecar mode.
 vaultToken:
   output: example/target/vault-token
   mode: 0777
