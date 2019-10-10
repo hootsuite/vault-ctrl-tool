@@ -254,5 +254,4 @@ func EmptySidecar() {
 	jww.INFO.Printf("Shutting down.")
 
 	cancel()
-
 }

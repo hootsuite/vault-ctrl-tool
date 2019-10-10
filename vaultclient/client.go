@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/kv"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/kv"
 
 	"github.com/hootsuite/vault-ctrl-tool/util"
 
@@ -196,9 +197,7 @@ func (vc *VaultClient) Authenticate() error {
 		}
 
 		return nil
-
 	}
-
 
 	// Otherwise, if there is a ConfigMap named vault-token in the default namespace, use the token it stores
 

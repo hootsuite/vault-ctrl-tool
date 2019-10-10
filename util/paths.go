@@ -1,10 +1,11 @@
 package util
 
 import (
-	jww "github.com/spf13/jwalterweatherman"
 	"os"
 	"path"
 	"path/filepath"
+
+	jww "github.com/spf13/jwalterweatherman"
 )
 
 var outputPrefix, inputPrefix string

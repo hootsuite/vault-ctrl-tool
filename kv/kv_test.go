@@ -61,15 +61,15 @@ func makeVaultKVSecrets() []SimpleSecret {
 	var secrets []SimpleSecret
 
 	secrets = append(secrets,
-		SimpleSecret{Key: "ex1", Field: "field1", Value: "one",},
-		SimpleSecret{Key: "ex1", Field: "field2", Value: "two",},
-		SimpleSecret{Key: "ex1", Field: "field3", Value: "three",},
-		SimpleSecret{Key: "ex2", Field: "fieldA", Value: "aye",},
-		SimpleSecret{Key: "ex2", Field: "fieldB", Value: "bee",},
-		SimpleSecret{Key: "ex2", Field: "fieldC", Value: "sea",},
-		SimpleSecret{Key: "ex3", Field: "fieldRed", Value: "red",},
-		SimpleSecret{Key: "ex3", Field: "fieldGreen", Value: "green",},
-		SimpleSecret{Key: "ex3", Field: "fieldBlue", Value: "blue",},
+		SimpleSecret{Key: "ex1", Field: "field1", Value: "one"},
+		SimpleSecret{Key: "ex1", Field: "field2", Value: "two"},
+		SimpleSecret{Key: "ex1", Field: "field3", Value: "three"},
+		SimpleSecret{Key: "ex2", Field: "fieldA", Value: "aye"},
+		SimpleSecret{Key: "ex2", Field: "fieldB", Value: "bee"},
+		SimpleSecret{Key: "ex2", Field: "fieldC", Value: "sea"},
+		SimpleSecret{Key: "ex3", Field: "fieldRed", Value: "red"},
+		SimpleSecret{Key: "ex3", Field: "fieldGreen", Value: "green"},
+		SimpleSecret{Key: "ex3", Field: "fieldBlue", Value: "blue"},
 	)
 
 	return secrets

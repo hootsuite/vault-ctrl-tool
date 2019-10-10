@@ -2,10 +2,11 @@ package cfg
 
 import (
 	"fmt"
+	"io/ioutil"
+
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
 	yaml "gopkg.in/yaml.v2"
-	"io/ioutil"
 )
 
 // VaultTokenType for writing the contents of a VAULT_TOKEN to the specified file with the specified mode.
@@ -221,9 +222,8 @@ func prepareConfig(filename string, current *Config) error {
 	// If we're not happy and we know it, clap^Wfail fatally..
 	if !happy {
 		return fmt.Errorf("there are issues that need to be resolved with the configuration file at %q", filename)
-	} else {
-		return nil
 	}
+	return nil
 }
 
 func ParseFile(configFile *string) (*Config, error) {
@@ -252,7 +252,7 @@ func ParseFile(configFile *string) (*Config, error) {
 
 	if err != nil {
 		return nil, err
-	} else {
-		return &current, nil
 	}
+
+	return &current, nil
 }
