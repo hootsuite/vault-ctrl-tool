@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 
 	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
