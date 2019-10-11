@@ -12,7 +12,7 @@ func TestStringToFileMode(t *testing.T) {
 	}
 
 	if mode, e := StringToFileMode("777"); mode == nil || *mode != os.FileMode(0777) || e != nil {
-		t.Errorf("Mode 777 should yeild a filemode of 0777, not %v.", *mode)
+		t.Errorf("Mode 777 should yield a filemode of 0777, not %v.", *mode)
 	}
 
 	if mode, e := StringToFileMode("a=rwx"); mode != nil || e == nil {

@@ -11,7 +11,6 @@ func StringToFileMode(fileMode string) (*os.FileMode, error) {
 	if fileMode == "" {
 		mode = os.FileMode(0400)
 	} else {
-
 		i, err := strconv.ParseInt(fileMode, 8, 32)
 
 		if err != nil {

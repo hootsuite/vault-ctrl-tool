@@ -2,9 +2,10 @@ package activity
 
 import (
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/kv"
 	"os"
 	"text/template"
+
+	"github.com/hootsuite/vault-ctrl-tool/kv"
 
 	"github.com/hashicorp/errwrap"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"

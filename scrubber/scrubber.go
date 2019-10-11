@@ -22,7 +22,6 @@ func AddFile(filename ...string) {
 }
 
 func SetupExitScrubber() {
-
 	jww.DEBUG.Printf("Setting up exit scrubber.")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)

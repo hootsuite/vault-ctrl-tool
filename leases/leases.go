@@ -87,7 +87,6 @@ func EnrollAuthToken(authToken *api.Secret) {
 	expiry := time.Now().Add(ttl)
 	expires := ttl != 0
 	Current.AuthTokenLease = LeasedAuthToken{Token: token, ExpiresAt: expiry, CanExpire: expires}
-
 }
 
 func WriteFile() {

@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/kv"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/kv"
 
 	"github.com/hootsuite/vault-ctrl-tool/util"
 
@@ -24,6 +25,7 @@ import (
 )
 
 var ErrPermissionDenied = errors.New("permission denied")
+var ErrTokenTTLTooShort = errors.New("could not renew token for full duration")
 
 type VaultClient struct {
 	serviceAccountToken string
@@ -92,15 +94,34 @@ func (vc *VaultClient) RevokeSelf() {
 }
 
 func (vc *VaultClient) RenewSelf(ctx context.Context, duration time.Duration) error {
+
+	requestedRenewalSecs := int(duration.Seconds())
+
 	jww.INFO.Print("Renewing Vault authentication token.")
 	op := func() error {
-		secret, err := vc.Delegate.Auth().Token().RenewSelf(int(duration.Seconds()))
+		secret, err := vc.Delegate.Auth().Token().RenewSelf(requestedRenewalSecs)
 		if err != nil {
 			jww.ERROR.Printf("Error renewing authentication token: %v", err)
 			if vc.checkPermissionDenied(err) {
 				return backoff.Permanent(ErrPermissionDenied)
 			}
 			return err
+		}
+
+		renewalDuration, err := secret.TokenTTL()
+
+		if err != nil {
+			jww.ERROR.Printf("Could not determine token TTL: %v", err)
+			return backoff.Permanent(err)
+		}
+
+		renewalDurationSecs := int(renewalDuration.Seconds())
+		delta := renewalDurationSecs - requestedRenewalSecs
+
+		// Wherein I learned there's no abs(int)
+		if delta < -5 || delta > 5 {
+			jww.WARN.Printf("Tried to renew token for %d seconds, but only got %d seconds.", requestedRenewalSecs, renewalDurationSecs)
+			return backoff.Permanent(ErrTokenTTLTooShort)
 		}
 
 		jww.INFO.Print("Vault authentication token renewed.")
@@ -115,6 +136,7 @@ func (vc *VaultClient) RenewSelf(ctx context.Context, duration time.Duration) er
 }
 
 // Authenticate to the Vault server.
+// Note this is also used during sidecar mode if the existing token expires.
 // 1. Use the token from the leases file if exists.
 // 2. Use the token from --vault-token (if used)
 // 3. Use VAULT_TOKEN if set.
@@ -128,8 +150,8 @@ func (vc *VaultClient) Authenticate() error {
 		err := vc.performTokenAuth(leases.Current.AuthTokenLease.Token)
 
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to vault server %q with token in lease file. Leases will not be renewed. Error: %v",
-				vc.Config.Address, err)
+			jww.ERROR.Printf("Failed to authenticate to vault server %q with token in lease file: %v", vc.Config.Address, err)
+			return err
 		}
 
 		return nil
@@ -149,20 +171,6 @@ func (vc *VaultClient) Authenticate() error {
 		return nil
 	}
 
-	// If EC2 auth is requested
-
-	if util.Flags.EC2AuthEnabled {
-
-		err := vc.performEC2Auth()
-
-		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q as an EC2 Instance: %v", vc.Config.Address, err)
-		}
-
-		return nil
-
-	}
-
 	// Otherwise, if VAULT_TOKEN is set, use that.
 
 	vaultToken := os.Getenv(api.EnvVaultToken)
@@ -176,6 +184,19 @@ func (vc *VaultClient) Authenticate() error {
 			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using %q: %v", vc.Config.Address,
 				api.EnvVaultToken, err)
 		}
+		return nil
+	}
+
+	// Otherwise, maybe EC2 auth is requested
+
+	if util.Flags.EC2AuthEnabled {
+
+		err := vc.performEC2Auth()
+
+		if err != nil {
+			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q as an EC2 Instance: %v", vc.Config.Address, err)
+		}
+
 		return nil
 	}
 

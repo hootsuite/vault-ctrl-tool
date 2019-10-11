@@ -1,8 +1,10 @@
 package main
 
 import (
-	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
+	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
+
+	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 
 	"github.com/hootsuite/vault-ctrl-tool/activity"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
@@ -10,7 +12,6 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
