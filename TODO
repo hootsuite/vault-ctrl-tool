@@ -1,0 +1,16 @@
+I infrequently touch this project, when I do I usually have some other goal in mind, this is a doc for notes
+on other things that need to happen.
+
+Make Init and Sidecar More Similar
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+There are some edge cases in sidecar mode that, in order to resolve them, make sidecar mode need to operate like
+init mode.  Therefore, the next time a bit of work needs to get done in either init or sidecar the code paths should
+be collapsed to be one such that the work done during init can also be done during sidecar. This includes handling
+(re)authentication and writing out files (to a temporary filename and renaming them into place).
+
+
+FATAL Cleanup
+~~~~~~~~~~~~~
+Fatal was great to get going but makes code paths with very sharp edges. Ideally everything is demoted to
+ERROR.Printf and errors are passed up to a main controlling construct that then can choose to fatal out of
+the process.

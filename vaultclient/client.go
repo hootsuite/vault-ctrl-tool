@@ -136,6 +136,7 @@ func (vc *VaultClient) RenewSelf(ctx context.Context, duration time.Duration) er
 }
 
 // Authenticate to the Vault server.
+// Note this is also used during sidecar mode if the existing token expires.
 // 1. Use the token from the leases file if exists.
 // 2. Use the token from --vault-token (if used)
 // 3. Use VAULT_TOKEN if set.
@@ -149,8 +150,8 @@ func (vc *VaultClient) Authenticate() error {
 		err := vc.performTokenAuth(leases.Current.AuthTokenLease.Token)
 
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to vault server %q with token in lease file. Leases will not be renewed. Error: %v",
-				vc.Config.Address, err)
+			jww.ERROR.Printf("Failed to authenticate to vault server %q with token in lease file: %v", vc.Config.Address, err)
+			return err
 		}
 
 		return nil

@@ -110,6 +110,8 @@ func performTokenRenewal(ctx context.Context, vaultClient vaultclient.VaultClien
 	// Happy path is being able to just renew this token.
 	err := vaultClient.RenewSelf(ctx, util.Flags.RenewLeaseDuration)
 	if err == nil {
+		jww.INFO.Printf("Successfully renewed Vault token.")
+		leases.WriteFile()
 		return nil
 	}
 
@@ -143,7 +145,7 @@ func performTokenRenewal(ctx context.Context, vaultClient vaultclient.VaultClien
 			jww.FATAL.Fatalf("Could not write vault token: %v", err)
 		}
 
-		// Success. We writeout a fresh lease file.
+		// Success. We write out a fresh lease file.
 		leases.WriteFile()
 		return nil
 	}
@@ -213,7 +215,10 @@ func PerformSidecar(currentConfig cfg.Config, vaultClient vaultclient.VaultClien
 	err := vaultClient.Authenticate()
 
 	if err != nil {
-		jww.FATAL.Fatalf("Failed to authenticate to Vault: %v", err)
+		jww.ERROR.Printf("Failed to authenticate to Vault (marking token expired): %v", err)
+		// marks the current token expired which will trigger re-authentication
+		leases.Current.AuthTokenLease.CanExpire = true
+		leases.Current.AuthTokenLease.ExpiresAt = time.Unix(0, 0)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
