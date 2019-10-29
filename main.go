@@ -70,7 +70,6 @@ func checkArgs() error {
 }
 
 func setupLogging() {
-
 	jww.SetStdoutOutput(os.Stderr)
 
 	if *debug {
@@ -106,7 +105,6 @@ func processArgs() {
 	kingpin.Flag("version", "Display build version").Default("false").BoolVar(&util.Flags.ShowVersion)
 
 	kingpin.Parse()
-
 }
 
 func main() {
@@ -170,15 +168,12 @@ func main() {
 		}
 
 	} else if *sidecarFlag {
-
 		if currentConfig.IsEmpty() {
 			activity.EmptySidecar()
 		} else {
 			activity.PerformSidecar(*currentConfig, *vaultClient)
 		}
-
 	}
 
 	jww.INFO.Printf("Tool Finished.")
-
 }

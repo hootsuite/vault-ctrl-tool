@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+
 	"github.com/hootsuite/vault-ctrl-tool/aws"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/kv"
