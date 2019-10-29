@@ -11,7 +11,6 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
 )
@@ -57,7 +56,7 @@ func generateFiles(client *api.Client, awsConfig cfg.AWSType) error {
 
 	result, err := client.Logical().Write(path, nil)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not fetch AWS credentials from %q: {{err}}", path), err)
+		return fmt.Errorf("could not fetch AWS credentials from %q: %w", path, err)
 	}
 
 	accessKey := result.Data["access_key"]
@@ -68,7 +67,7 @@ func generateFiles(client *api.Client, awsConfig cfg.AWSType) error {
 	jww.DEBUG.Printf("Received AWS access key %q", accessKey)
 	mode, err := util.StringToFileMode(awsConfig.Mode)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not parse %q as a file mode: {{err}}", mode), err)
+		return fmt.Errorf("could not parse %q as a file mode: %w", mode, err)
 	}
 
 	configFilename := filepath.Join(awsConfig.OutputPath, "config.wip")
@@ -80,7 +79,7 @@ func generateFiles(client *api.Client, awsConfig cfg.AWSType) error {
 	configFile, err := os.OpenFile(configFilename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, *mode)
 
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not create aws config file at %q: {{err}}", configFilename), err)
+		return fmt.Errorf("could not create aws config file at %q: %w", configFilename, err)
 	}
 	defer configFile.Close()
 
@@ -89,7 +88,7 @@ func generateFiles(client *api.Client, awsConfig cfg.AWSType) error {
 	credsFile, err := os.OpenFile(credentialsFilename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, *mode)
 
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not create aws credentials file at %q: {{err}}", credentialsFilename), err)
+		return fmt.Errorf("could not create aws credentials file at %q: %w", credentialsFilename, err)
 	}
 	defer credsFile.Close()
 
@@ -100,12 +99,12 @@ func generateFiles(client *api.Client, awsConfig cfg.AWSType) error {
 	_, err = fmt.Fprintf(credsFile, "[%s]\naws_access_key_id=%s\naws_secret_access_key=%s\naws_session_token=%s\n\n",
 		header, accessKey, secretKey, securityToken)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not write contents to %q: {{err}}", credentialsFilename), err)
+		return fmt.Errorf("could not write contents to %q: %w", credentialsFilename, err)
 	}
 
 	_, err = fmt.Fprintf(configFile, "[%s]\nregion=%s\n\n", header, awsConfig.Region)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not write contents to %q: {{err}}", configFilename), err)
+		return fmt.Errorf("could not write contents to %q: %w", configFilename, err)
 	}
 
 	leases.EnrollAWS(result, awsConfig)

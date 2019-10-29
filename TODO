@@ -9,8 +9,6 @@ be collapsed to be one such that the work done during init can also be done duri
 (re)authentication and writing out files (to a temporary filename and renaming them into place).
 
 
-FATAL Cleanup
+FATAL Cleanup (Progress: ~85%)
 ~~~~~~~~~~~~~
-Fatal was great to get going but makes code paths with very sharp edges. Ideally everything is demoted to
-ERROR.Printf and errors are passed up to a main controlling construct that then can choose to fatal out of
-the process.
+Go 1.13 officially supports rethrowing errors, use Errorf to do this and bubble them up.

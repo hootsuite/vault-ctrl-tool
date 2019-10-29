@@ -37,7 +37,7 @@ type VaultClient struct {
 	Config              *api.Config
 }
 
-func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole *string) VaultClient {
+func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole *string) (*VaultClient, error) {
 
 	var vc VaultClient
 
@@ -61,12 +61,12 @@ func NewVaultClient(tokenFile *string, secretPrefix string, loginPath, authRole 
 	newCli, err := api.NewClient(vc.Config)
 
 	if err != nil {
-		jww.FATAL.Printf("Unable to make a Vault client: %v", err)
+		return nil, fmt.Errorf("unable to make a Vault client: %w", err)
 	}
 
 	vc.Delegate = newCli
 
-	return vc
+	return &vc, nil
 }
 
 func (vc *VaultClient) GetTokenID() (string, error) {
@@ -150,8 +150,7 @@ func (vc *VaultClient) Authenticate() error {
 		err := vc.performTokenAuth(leases.Current.AuthTokenLease.Token)
 
 		if err != nil {
-			jww.ERROR.Printf("Failed to authenticate to vault server %q with token in lease file: %v", vc.Config.Address, err)
-			return err
+			return fmt.Errorf("failed to authenticate to Vault server %q with token in lease file: %w", vc.Config.Address, err)
 		}
 
 		return nil
@@ -166,7 +165,7 @@ func (vc *VaultClient) Authenticate() error {
 		err := vc.performTokenAuth(util.Flags.VaultTokenArg)
 
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using command line token: %v", vc.Config.Address, err)
+			return fmt.Errorf("failed to authenticate to Vault server %q using command line token: %w", vc.Config.Address, err)
 		}
 		return nil
 	}
@@ -181,7 +180,7 @@ func (vc *VaultClient) Authenticate() error {
 
 		err := vc.performTokenAuth(vaultToken)
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using %q: %v", vc.Config.Address,
+			return fmt.Errorf("failed to authenticate to Vault server %q using %q: %w", vc.Config.Address,
 				api.EnvVaultToken, err)
 		}
 		return nil
@@ -194,7 +193,7 @@ func (vc *VaultClient) Authenticate() error {
 		err := vc.performEC2Auth()
 
 		if err != nil {
-			jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q as an EC2 Instance: %v", vc.Config.Address, err)
+			return fmt.Errorf("failed to authenticate to Vault server %q as an EC2 Instance: %w", vc.Config.Address, err)
 		}
 
 		return nil
@@ -226,7 +225,7 @@ func (vc *VaultClient) Authenticate() error {
 
 						err := vc.performTokenAuth(token)
 						if err != nil {
-							jww.FATAL.Fatalf("Failed to authenticate to Vault Server %q using token from vault-token ConfigMap: %v", vc.Config.Address, err)
+							return fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", vc.Config.Address, err)
 						}
 						return nil
 					}
@@ -243,11 +242,10 @@ func (vc *VaultClient) Authenticate() error {
 		return vc.performKubernetesAuth()
 	}
 
-	jww.FATAL.Fatalf("No authentication mechanism specified and %q is not set.", api.EnvVaultToken)
-	return nil
+	return fmt.Errorf("no authentication mechanism specified and %q is not set", api.EnvVaultToken)
 }
 
-func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) []kv.SimpleSecret {
+func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) ([]kv.SimpleSecret, error) {
 
 	var simpleSecrets []kv.SimpleSecret
 
@@ -268,7 +266,7 @@ func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) []kv.SimpleSecret
 		// The same key could be in different paths, but we don't allow this because it's confusing.
 		for _, s := range simpleSecrets {
 			if s.Key == key {
-				jww.FATAL.Fatalf("Duplicate secret key %q.", key)
+				return nil, fmt.Errorf("duplicate secret key %q", key)
 			}
 		}
 
@@ -276,7 +274,7 @@ func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) []kv.SimpleSecret
 		response, err := vc.Delegate.Logical().Read(path)
 
 		if err != nil {
-			jww.FATAL.Fatalf("error fetching secret %q from %q: %v", path, vc.Delegate.Address(), err)
+			return nil, fmt.Errorf("error fetching secret %q from %q: %w", path, vc.Delegate.Address(), err)
 		}
 
 		if response == nil {
@@ -285,7 +283,7 @@ func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) []kv.SimpleSecret
 					"or there are no secrets). Ignoring since missingOk is set in the config.",
 					vc.Delegate.Address(), path)
 			} else {
-				jww.FATAL.Fatalf("No response returned fetching secrets.")
+				return nil, fmt.Errorf("no response returned fetching secrets")
 			}
 		} else {
 			var secretData map[string]interface{}
@@ -312,7 +310,7 @@ func (vc *VaultClient) ReadKVSecrets(currentConfig cfg.Config) []kv.SimpleSecret
 		}
 	}
 
-	return simpleSecrets
+	return simpleSecrets, nil
 }
 
 func (vc *VaultClient) checkPermissionDenied(err error) bool {

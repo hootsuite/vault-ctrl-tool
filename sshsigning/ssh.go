@@ -15,7 +15,6 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/leases"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
 	"golang.org/x/crypto/ssh"
@@ -39,17 +38,17 @@ func generateKeyPair(outputPath string) error {
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
-		return errwrap.Wrapf("could not generate RSA key: {{err}}", err)
+		return fmt.Errorf("could not generate RSA key: %w", err)
 	}
 
 	if err := os.MkdirAll(outputPath, 0700); err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not make directory path %q: {{err}}", outputPath), err)
+		return fmt.Errorf("could not make directory path %q: %w", outputPath, err)
 	}
 
 	// Write a SSH private key..
 	privateKeyFile, err := os.OpenFile(privateKeyFilename, syscall.O_RDWR|syscall.O_CREAT|syscall.O_TRUNC, 0600)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not create private key file %q: {{err}}", privateKeyFilename), err)
+		return fmt.Errorf("could not create private key file %q: %w", privateKeyFilename, err)
 	}
 	defer privateKeyFile.Close()
 
@@ -57,18 +56,18 @@ func generateKeyPair(outputPath string) error {
 
 	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
 	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not PEM encode private key %q: {{err}}", privateKeyFilename), err)
+		return fmt.Errorf("could not PEM encode private key %q: %w", privateKeyFilename, err)
 	}
 
 	// Write SSH public key..
 	pub, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not create public SSH key %q: {{err}}", publicKeyFilename), err)
+		return fmt.Errorf("could not create public SSH key %q: %w", publicKeyFilename, err)
 	}
 
 	err = ioutil.WriteFile(publicKeyFilename, ssh.MarshalAuthorizedKey(pub), 0600)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not write public SSH key %q: {{err}}", publicKeyFilename), err)
+		return fmt.Errorf("could not write public SSH key %q: %w", publicKeyFilename, err)
 
 	}
 	scrubber.AddFile(publicKeyFilename)
@@ -80,10 +79,10 @@ func WriteKeys(currentConfig cfg.Config, client *api.Client) error {
 
 	for _, sshConfig := range currentConfig.SSH {
 		if err := generateKeyPair(sshConfig.OutputPath); err != nil {
-			return errwrap.Wrapf("failed to generate SSH keys: {{err}}", err)
+			return fmt.Errorf("failed to generate SSH keys: %w", err)
 		}
 		if err := SignKey(client, sshConfig.OutputPath, sshConfig.VaultMount, sshConfig.VaultRole); err != nil {
-			return errwrap.Wrapf("failed to sign SSH key: {{err}}", err)
+			return fmt.Errorf("failed to sign SSH key: %w", err)
 		}
 		leases.EnrollSSH(sshConfig)
 	}
@@ -93,12 +92,12 @@ func WriteKeys(currentConfig cfg.Config, client *api.Client) error {
 func ReadCertificateValidBefore(certificate string) (uint64, error) {
 	certificateBytes, err := ioutil.ReadFile(certificate)
 	if err != nil {
-		return 0, errwrap.Wrapf(fmt.Sprintf("could not read certificate file %q: {{err}}", certificate), err)
+		return 0, fmt.Errorf("could not read certificate file %q: %w", certificate, err)
 	}
 
 	cert, err := ssh.ParsePublicKey(certificateBytes)
 	if err != nil {
-		return 0, errwrap.Wrapf(fmt.Sprintf("could not parse ssh certificate %q: {{err}}", certificate), err)
+		return 0, fmt.Errorf("could not parse SSH certificate %q: %w", certificate, err)
 	}
 	sshCert, ok := cert.(*ssh.Certificate)
 	if !ok {
@@ -117,14 +116,14 @@ func SignKey(client *api.Client, outputPath string, vaultMount string, vaultRole
 
 	publicKeyBytes, err := ioutil.ReadFile(publicKeyFilename)
 	if err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("could not read SSH public key %q: {{err}}", publicKeyFilename), err)
+		return fmt.Errorf("could not read SSH public key %q: %w", publicKeyFilename, err)
 	}
 
 	resp, err := vaultSSH.SignKey(vaultRole, map[string]interface{}{
 		"public_key": string(publicKeyBytes),
 	})
 	if err != nil {
-		return errwrap.Wrapf("failed to sign SSH key: {{err}}", err)
+		return fmt.Errorf("failed to sign SSH key: %w", err)
 	}
 
 	signedKey := resp.Data["signed_key"]
@@ -139,7 +138,7 @@ func SignKey(client *api.Client, outputPath string, vaultMount string, vaultRole
 
 	jww.INFO.Printf("Writing ssh certificate to %q", certificateFilename)
 	if err := ioutil.WriteFile(certificateFilename, []byte(signedKeyString), 0600); err != nil {
-		return errwrap.Wrapf("could not write certificate file: {{err}}", err)
+		return fmt.Errorf("could not write certificate file: %w", err)
 	}
 	scrubber.AddFile(certificateFilename)
 	return nil

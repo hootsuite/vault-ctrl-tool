@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 
@@ -37,13 +39,15 @@ var (
 	neverScrub             = kingpin.Flag("never-scrub", "Don't delete outputted files if the tool fails").Default("false").Bool()
 )
 
-func checkArgs() {
+var buildVersion string
+
+func checkArgs() error {
 	actions := 0
 	if util.Flags.PerformInit {
 		actions++
 
 		if util.Flags.PerformOneShot {
-			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
+			return errors.New("the --one-shot flag can only be used in --sidecar mode")
 		}
 	}
 
@@ -54,13 +58,15 @@ func checkArgs() {
 	if util.Flags.PerformCleanup {
 		actions++
 		if util.Flags.PerformOneShot {
-			jww.FATAL.Fatalf("The --one-shot flag can only be used in --sidecar mode.")
+			return errors.New("the --one-shot flag can only be used in --sidecar mode")
 		}
 	}
 
 	if actions != 1 {
-		jww.FATAL.Fatalf("Specify exactly one of --init, --sidecar, or --cleanup flags.")
+		return errors.New("specify exactly one of --init, --sidecar, or --cleanup flags")
 	}
+
+	return nil
 }
 
 func setupLogging() {
@@ -96,21 +102,34 @@ func processArgs() {
 	kingpin.Flag("ec2-login-path", "Vault path to authenticate against").Default(util.VaultEC2AuthPath).StringVar(&util.Flags.EC2VaultAuthPath)
 	kingpin.Flag("ec2-vault-nonce", "Nonce to use if re-authenticating.").Default("").StringVar(&util.Flags.EC2VaultNonce)
 
+	// Show version
+	kingpin.Flag("version", "Display build version").Default("false").BoolVar(&util.Flags.ShowVersion)
+
 	kingpin.Parse()
 
-	checkArgs()
 }
 
 func main() {
 
 	processArgs()
 
+	if util.Flags.ShowVersion {
+		fmt.Printf("Version: %s\n", buildVersion)
+		os.Exit(0)
+	}
+
+	err := checkArgs()
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "Invalid arguments: %v\n", err)
+		os.Exit(1)
+	}
+
 	util.SetPrefixes(inputPrefix, outputPrefix)
 	leases.SetIgnoreNonRenewableAuth(ignoreNonRenewableAuth)
 
 	setupLogging()
 
-	jww.INFO.Printf("Tool Starting.")
+	jww.INFO.Printf("Tool Starting (version:%s).", buildVersion)
 
 	if util.Flags.PerformCleanup {
 		activity.PerformCleanup(util.Flags.RevokeOnCleanup)
@@ -123,10 +142,14 @@ func main() {
 		jww.FATAL.Fatalf("Could not read config file %s: %v", *configFile, err)
 	}
 
-	vaultClient := vaultclient.NewVaultClient(serviceAccountToken,
+	vaultClient, err := vaultclient.NewVaultClient(serviceAccountToken,
 		cfg.CalculateSecretPrefix(*currentConfig, serviceSecretPrefix),
 		k8sLoginPath,
 		k8sAuthRole)
+
+	if err != nil {
+		jww.FATAL.Fatalf("Could not create vault client: %v", err)
+	}
 
 	// Exit scrubber deletes files the tool created in the event of it being aborted or
 	// if something goes wrong. The defer (below) takes care of the normal exit, and the setup
@@ -141,14 +164,17 @@ func main() {
 
 	if util.Flags.PerformInit {
 
-		activity.PerformInitTasks(*currentConfig, vaultClient)
+		err := activity.PerformInitTasks(*currentConfig, *vaultClient)
+		if err != nil {
+			jww.FATAL.Fatalf("Could not perform init tasks: %v", err)
+		}
 
 	} else if *sidecarFlag {
 
 		if currentConfig.IsEmpty() {
 			activity.EmptySidecar()
 		} else {
-			activity.PerformSidecar(*currentConfig, vaultClient)
+			activity.PerformSidecar(*currentConfig, *vaultClient)
 		}
 
 	}

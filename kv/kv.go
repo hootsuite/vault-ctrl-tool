@@ -9,7 +9,6 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 
-	"github.com/hashicorp/errwrap"
 	jww "github.com/spf13/jwalterweatherman"
 )
 
@@ -29,8 +28,8 @@ func WriteOutput(currentConfig cfg.Config, kvSecrets []SimpleSecret) error {
 		mode, err := util.StringToFileMode(request.Mode)
 
 		if err != nil {
-			return errwrap.Wrapf(fmt.Sprintf("Could not parse file mode %q for key %q: {{err}}",
-				request.Mode, request.Key), err)
+			return fmt.Errorf("could not parse file mode %q for key %q: %w",
+				request.Mode, request.Key, err)
 		}
 
 		// output all the field files
@@ -50,7 +49,7 @@ func WriteOutput(currentConfig cfg.Config, kvSecrets []SimpleSecret) error {
 				util.MakeDirsForFile(field.Output)
 				file, err := os.OpenFile(field.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 				if err != nil {
-					return errwrap.Wrapf(fmt.Sprintf("couldn't open file %q: {{err}}", field.Output), err)
+					return fmt.Errorf("couldn't open file %q: %w", field.Output, err)
 				}
 
 				scrubber.AddFile(field.Output)
@@ -61,7 +60,7 @@ func WriteOutput(currentConfig cfg.Config, kvSecrets []SimpleSecret) error {
 				_, err = fmt.Fprint(file, value)
 
 				if err != nil {
-					return errwrap.Wrapf(fmt.Sprintf("Failed writing secret to file %q: {{err}}", field.Output), err)
+					return fmt.Errorf("failed writing secret to file %q: %w", field.Output, err)
 				}
 
 				file.Close()
@@ -100,7 +99,7 @@ func dumpJSON(kvSecrets []SimpleSecret, secretsToFileMap map[string][]cfg.Secret
 		file, err := os.OpenFile(filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fileToModeMap[filename])
 
 		if err != nil {
-			return errwrap.Wrapf(fmt.Sprintf("Couldn't open file %q: {{err}}", filename), err)
+			return fmt.Errorf("couldn't open file %q: %w", filename, err)
 		}
 
 		scrubber.AddFile(filename)
@@ -108,14 +107,14 @@ func dumpJSON(kvSecrets []SimpleSecret, secretsToFileMap map[string][]cfg.Secret
 		data, err := collectSecrets(filename, secrets, kvSecrets)
 
 		if err != nil {
-			return errwrap.Wrapf("could not output secrets file: {{err}}", err)
+			return fmt.Errorf("could not output secrets file: %w", err)
 		}
 
 		if len(data) > 0 {
 			err = json.NewEncoder(file).Encode(&data)
 
 			if err != nil {
-				return errwrap.Wrapf(fmt.Sprintf("failed to save secrets into %q: {{err}}", filename), err)
+				return fmt.Errorf("failed to save secrets into %q: %w", filename, err)
 			}
 		}
 

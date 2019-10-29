@@ -2,11 +2,11 @@ package vaultclient
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/util"
 	jww "github.com/spf13/jwalterweatherman"
@@ -80,7 +80,7 @@ func (vc *VaultClient) performEC2Auth() error {
 	err = req.SetJSONBody(authValues)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("could not perform EC2 authentication: %w", err)
 	}
 
 	jww.DEBUG.Printf("Sending EC2 Auth request to %q", req.URL)
@@ -98,14 +98,14 @@ func (vc *VaultClient) performEC2Auth() error {
 
 	err = json.NewDecoder(resp.Body).Decode(&secret)
 	if err != nil {
-		return errwrap.Wrapf("error parsing response: {{err}}", err)
+		return fmt.Errorf("could not parse response: %w", err)
 	}
 
 	jww.DEBUG.Printf("Result: %v", secret)
 
 	token, err := secret.TokenID()
 	if err != nil {
-		jww.FATAL.Fatalf("Could not extract Vault Token: %v", err)
+		return fmt.Errorf("could not extract Vault token: %w", err)
 	}
 
 	vc.AuthToken = &secret

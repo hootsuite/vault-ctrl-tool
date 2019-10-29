@@ -151,7 +151,7 @@ func prepareConfig(filename string, current *Config) error {
 		}
 
 		if secret.Path == "" {
-			jww.FATAL.Fatalf("No Vault path specified for secrets key %q in configuration file", secret.Key)
+			return fmt.Errorf("no Vault path specified for secrets key %q in configuration file", secret.Key)
 		}
 
 		if secret.Key != "" && keys[secret.Key] {
@@ -237,7 +237,7 @@ func ParseFile(configFile *string) (*Config, error) {
 	yamlFile, err := ioutil.ReadFile(absConfigFile)
 
 	if err != nil {
-		return nil, fmt.Errorf("error reading config file %q: %v", absConfigFile, err)
+		return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
 	}
 
 	var current Config
@@ -245,7 +245,7 @@ func ParseFile(configFile *string) (*Config, error) {
 	err = yaml.Unmarshal(yamlFile, &current)
 
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling config file %q: %v", absConfigFile, err)
+		return nil, fmt.Errorf("could not unmarshal config file %q: %w", absConfigFile, err)
 	}
 
 	err = prepareConfig(absConfigFile, &current)

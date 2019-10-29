@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"fmt"
 	"github.com/hootsuite/vault-ctrl-tool/aws"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/kv"
@@ -11,7 +12,7 @@ import (
 	jww "github.com/spf13/jwalterweatherman"
 )
 
-func PerformInitTasks(currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {
+func PerformInitTasks(currentConfig cfg.Config, vaultClient vaultclient.VaultClient) error {
 
 	jww.DEBUG.Print("Performing init tasks.")
 
@@ -19,46 +20,49 @@ func PerformInitTasks(currentConfig cfg.Config, vaultClient vaultclient.VaultCli
 		jww.INFO.Print("Configuration file is empty. Writing empty lease file and skipping authentication.")
 		leases.WriteFile()
 		scrubber.DisableExitScrubber()
-		return
+		return nil
 	}
 
 	// Read templates first so we don't waste Vault's time if there's an issue.
 	if err := ingestTemplates(currentConfig); err != nil {
-		jww.FATAL.Fatalf("Could not ingest templates: %v", err)
+		return fmt.Errorf("could not ingest templates: %w", err)
 	}
 
 	if err := vaultClient.Authenticate(); err != nil {
-		jww.FATAL.Fatalf("Failed to log into Vault: %v", err)
+		return fmt.Errorf("failed to log into Vault: %w", err)
 	}
 
 	token, err := vaultClient.GetTokenID()
 	if err != nil {
-		jww.FATAL.Fatalf("Could not extract Vault Token: %v", err)
+		return fmt.Errorf("could not extract Vault token: %w", err)
 	}
 
 	leases.EnrollAuthToken(vaultClient.AuthToken)
 
-	kvSecrets := vaultClient.ReadKVSecrets(currentConfig)
+	kvSecrets, err := vaultClient.ReadKVSecrets(currentConfig)
+	if err != nil {
+		return fmt.Errorf("could not read KV secrets: %w", err)
+	}
 
 	// Output necessary files
 	if err := vaultclient.WriteToken(currentConfig, token); err != nil {
-		jww.FATAL.Fatalf("Could not write vault token: %v", err)
+		return fmt.Errorf("could not write Vault token: %w", err)
 	}
 
 	if err := kv.WriteOutput(currentConfig, kvSecrets); err != nil {
-		jww.FATAL.Fatalf("Could not write KV secrets: %v", err)
+		return fmt.Errorf("could not write KV secrets: %w", err)
 	}
 
 	if err := writeTemplates(currentConfig, kvSecrets); err != nil {
-		jww.FATAL.Fatalf("Could not write templates: %v", err)
+		return fmt.Errorf("could not write templates: %w", err)
 	}
 
 	if err := aws.WriteCredentials(currentConfig, vaultClient.Delegate); err != nil {
-		jww.FATAL.Fatalf("Could not write AWS credentials: %v", err)
+		return fmt.Errorf("could not write AWS credentials: %w", err)
 	}
 
 	if err := sshsigning.WriteKeys(currentConfig, vaultClient.Delegate); err != nil {
-		jww.FATAL.Fatalf("Could not setup SSH certificate: %v", err)
+		return fmt.Errorf("could not setup SSH certificate: %w", err)
 	}
 
 	scrubber.EnrollScrubFiles()
@@ -67,4 +71,5 @@ func PerformInitTasks(currentConfig cfg.Config, vaultClient vaultclient.VaultCli
 
 	jww.DEBUG.Print("All initialization tasks completed.")
 	scrubber.DisableExitScrubber()
+	return nil
 }

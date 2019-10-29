@@ -2,13 +2,14 @@ package activity
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hootsuite/vault-ctrl-tool/aws"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/leases"
@@ -90,7 +91,7 @@ func renewLeases(ctx context.Context, currentConfig cfg.Config, vaultClient vaul
 		if validBefore != uint64(ssh.CertTimeInfinity) && validBefore < uint64(threshold.Unix()) {
 			err := sshsigning.SignKey(vaultClient.Delegate, sshLease.OutputPath, sshLease.VaultMount, sshLease.VaultRole)
 
-			if errwrap.Contains(err, "Code: 403") {
+			if err != nil && strings.Contains(err.Error(), "Code: 403") {
 				jww.FATAL.Fatalf("Permission denied renewing SSH certificate %q.", certificateFilename)
 			} else {
 				if validBefore < uint64(time.Now().Unix()) {
@@ -128,21 +129,20 @@ func performTokenRenewal(ctx context.Context, vaultClient vaultclient.VaultClien
 
 		err = vaultClient.Authenticate()
 		if err != nil {
-			jww.ERROR.Printf("Could not authenticate to vault: %v", err)
-			return err
+			return fmt.Errorf("could not authenticate to Vault: %w", err)
 		}
 
 		leases.EnrollAuthToken(vaultClient.AuthToken)
 
 		token, err := vaultClient.GetTokenID()
 		if err != nil {
-			jww.ERROR.Printf("Could not extract Vault Token: %v", err)
+			return fmt.Errorf("could not extract Vault token: %w", err)
 		}
 
 		// Because the init and sidecar code paths are still different, we write the
 		// token to a file here.
 		if err := vaultclient.WriteToken(currentConfig, token); err != nil {
-			jww.FATAL.Fatalf("Could not write vault token: %v", err)
+			return fmt.Errorf("could not write Vault token: %w", err)
 		}
 
 		// Success. We write out a fresh lease file.
@@ -150,7 +150,7 @@ func performTokenRenewal(ctx context.Context, vaultClient vaultclient.VaultClien
 		return nil
 	}
 
-	return err
+	return fmt.Errorf("could not renew token: %w", err)
 }
 
 func performPeriodicSidecar(ctx context.Context, currentConfig cfg.Config, vaultClient vaultclient.VaultClient) {

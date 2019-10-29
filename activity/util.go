@@ -7,7 +7,6 @@ import (
 
 	"github.com/hootsuite/vault-ctrl-tool/kv"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hootsuite/vault-ctrl-tool/cfg"
 	"github.com/hootsuite/vault-ctrl-tool/scrubber"
 	"github.com/hootsuite/vault-ctrl-tool/util"
@@ -27,7 +26,7 @@ func ingestTemplates(currentConfig cfg.Config) error {
 		t, err := template.ParseFiles(tpl.Input)
 
 		if err != nil {
-			return errwrap.Wrapf(fmt.Sprintf("error parsing template %q: {{err}}", tpl.Input), err)
+			return fmt.Errorf("error parsing template %q: %w", tpl.Input, err)
 		}
 		templates[tpl.Input] = t
 	}
@@ -50,7 +49,7 @@ func writeTemplates(currentConfig cfg.Config, kvSecrets []kv.SimpleSecret) error
 
 		mode, err := util.StringToFileMode(modeString)
 		if err != nil {
-			return errwrap.Wrapf(fmt.Sprintf("could not parse file mode %q for %q: {{err}}", modeString, tpl.Output), err)
+			return fmt.Errorf("could not parse file mode %q for %q: %w", modeString, tpl.Output, err)
 		}
 
 		jww.INFO.Printf("Resolving template %q into %q", tpl.Input, tpl.Output)
@@ -68,7 +67,7 @@ func writeTemplates(currentConfig cfg.Config, kvSecrets []kv.SimpleSecret) error
 		err = templates[tpl.Input].Option("missingkey=error").Execute(file, tplVars)
 
 		if err != nil {
-			return errwrap.Wrapf(fmt.Sprintf("failed to write template %q: {{err}}", tpl.Output), err)
+			return fmt.Errorf("failed to write template %q: %w", tpl.Output, err)
 		}
 
 		_ = file.Close()
