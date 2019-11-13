@@ -27,10 +27,16 @@ func SetPrefixes(in, out *string) {
 func AbsoluteOutputPath(filename string) string {
 	var outPath string
 
-	if outputPrefix != "" {
-		outPath = path.Join(outputPrefix, filename)
-	} else {
+	if path.IsAbs(filename) {
+		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs to
+		// remove multiple slashes, ..'s, etc.
 		outPath = filename
+	} else {
+		if outputPrefix != "" {
+			outPath = path.Join(outputPrefix, filename)
+		} else {
+			outPath = filename
+		}
 	}
 
 	abs, err := filepath.Abs(outPath)
@@ -45,10 +51,16 @@ func AbsoluteOutputPath(filename string) string {
 func AbsoluteInputPath(filename string) string {
 	var outPath string
 
-	if inputPrefix != "" {
-		outPath = path.Join(inputPrefix, filename)
-	} else {
+	if path.IsAbs(filename) {
+		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs to
+		// remove multiple slashes, ..'s, etc.
 		outPath = filename
+	} else {
+		if inputPrefix != "" {
+			outPath = path.Join(inputPrefix, filename)
+		} else {
+			outPath = filename
+		}
 	}
 
 	abs, err := filepath.Abs(outPath)

@@ -15,8 +15,8 @@ func TestAbsoluteOutputPath(t *testing.T) {
 
 	outputPrefix = "/tmp/"
 
-	if path := AbsoluteOutputPath("/foo"); path != "/tmp/foo" {
-		t.Errorf("Multiple slashes should be removed, not: %v", path)
+	if path := AbsoluteOutputPath("/foo"); path != "/foo" {
+		t.Error("Output path must not be prefixed when the input filename is already absolute.")
 	}
 
 	outputPrefix = "/tmp"
@@ -40,8 +40,8 @@ func TestAbsoluteInputPath(t *testing.T) {
 
 	inputPrefix = "/tmp/"
 
-	if path := AbsoluteInputPath("/foo"); path != "/tmp/foo" {
-		t.Errorf("Multiple slashes should be removed, not: %v", path)
+	if path := AbsoluteInputPath("/foo"); path != "/foo" {
+		t.Error("Input path must not be prefixed when the input filename is already absolute.")
 	}
 
 	inputPrefix = "/tmp"
