@@ -28,7 +28,8 @@ func AbsoluteOutputPath(filename string) string {
 	var outPath string
 
 	if path.IsAbs(filename) {
-		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs
+		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs to
+		// remove multiple slashes, ..'s, etc.
 		outPath = filename
 	} else {
 		if outputPrefix != "" {
@@ -51,7 +52,8 @@ func AbsoluteInputPath(filename string) string {
 	var outPath string
 
 	if path.IsAbs(filename) {
-		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs
+		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs to
+		// remove multiple slashes, ..'s, etc.
 		outPath = filename
 	} else {
 		if inputPrefix != "" {
