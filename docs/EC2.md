@@ -13,7 +13,7 @@ Assuming you have already bound an IAM role to your EC2 instance, you'll need to
 this IAM role with specific policies.
 
 ```bash
-vault write auth/aws/role/example-role auth_type=iam bound_iam_principal_arn=example-iam-role-arn policies=example-policy max_ttl=500h
+vault write auth/aws/role/example auth_type=iam bound_iam_principal_arn=example-iam-role-arn policies=example max_ttl=500h
 ```
 
 Vault Control Tool requires the `--iam-auth-role` flag to be set to this role name in order to authenticate to Vault using it.
@@ -24,7 +24,7 @@ Assuming you have a `vault-config.yml` in `/etc/vault-ctrl-tool`, initialization
 
 ```bash
 export VAULT_ADDR=https://vault.service.consul:8200/
-vault-ctrl-tool --iam-auth-role=example-role --init --input-prefix=/etc/vault-ctrl-tool --output-prefix=/etc/vault-ctrl-tool
+vault-ctrl-tool --iam-auth-role=example --init --input-prefix=/etc/vault-ctrl-tool --output-prefix=/etc/vault-ctrl-tool
 ```
 
 ### Sidecar
@@ -34,7 +34,7 @@ mechanism:
 
 ```bash
 export VAULT_ADDR=https://vault.service.consul:8200/
-vault-ctrl-tool --iam-auth-role=example-role --sidecar --one-shot --input-prefix=/etc/vault-ctrl-tool --output-prefix=/etc/vault-ctrl-tool
+vault-ctrl-tool --sidecar --one-shot --input-prefix=/etc/vault-ctrl-tool --output-prefix=/etc/vault-ctrl-tool
 ```
 
 ## EC2
