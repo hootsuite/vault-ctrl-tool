@@ -23,6 +23,7 @@ linux-binary:
 copy-binary:
 	cp bin/vault-ctrl-tool.$(CURRENTOS).$(CURRENTARCH) vault-ctrl-tool
 
-vendor:
-	go mod vendor
+deps: ## Ensure dependencies are present and prune orphaned
+	go mod download
+	go mod tidy
 
