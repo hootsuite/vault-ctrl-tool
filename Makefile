@@ -2,9 +2,6 @@ CURRENTOS := $(shell go env GOOS)
 CURRENTARCH := $(shell go env GOARCH)
 VERSION := dev
 
-export GOFLAGS=-mod=vendor
-unexport GOPATH
-
 build: clean test darwin-binary linux-binary copy-binary
 
 clean: ## Delete the destination directory.

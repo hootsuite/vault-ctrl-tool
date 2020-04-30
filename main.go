@@ -43,6 +43,10 @@ var (
 var buildVersion string
 
 func checkArgs() error {
+	if util.Flags.EC2AuthEnabled && util.Flags.IamAuthRole != "" {
+		return errors.New("specify exactly one of --ec2-auth or --iam-auth-role")
+	}
+
 	actions := 0
 	if util.Flags.PerformInit {
 		actions++
@@ -104,6 +108,7 @@ func processArgs() {
 
 	// IAM Authentication
 	kingpin.Flag("iam-auth-role", "The role used to perform iam authentication").Default("").StringVar(&util.Flags.IamAuthRole)
+	kingpin.Flag("iam-vault-auth-backend", "The name of the auth backend in Vault to perform iam authentication against. Defaults to `aws`.").Default("aws").StringVar(&util.Flags.IamVaultAuthBackend)
 
 	// Show version
 	kingpin.Flag("version", "Display build version").Default("false").BoolVar(&util.Flags.ShowVersion)
