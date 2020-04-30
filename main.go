@@ -3,8 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
+
+	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/hootsuite/vault-ctrl-tool/vaultclient"
 
@@ -42,6 +43,10 @@ var (
 var buildVersion string
 
 func checkArgs() error {
+	if util.Flags.EC2AuthEnabled && util.Flags.IamAuthRole != "" {
+		return errors.New("specify exactly one of --ec2-auth or --iam-auth-role")
+	}
+
 	actions := 0
 	if util.Flags.PerformInit {
 		actions++
@@ -100,6 +105,10 @@ func processArgs() {
 	kingpin.Flag("ec2-auth-role", "Override the rolename used to authenticate to Vault.").StringVar(&util.Flags.EC2AuthRole)
 	kingpin.Flag("ec2-login-path", "Vault path to authenticate against").Default(util.VaultEC2AuthPath).StringVar(&util.Flags.EC2VaultAuthPath)
 	kingpin.Flag("ec2-vault-nonce", "Nonce to use if re-authenticating.").Default("").StringVar(&util.Flags.EC2VaultNonce)
+
+	// IAM Authentication
+	kingpin.Flag("iam-auth-role", "The role used to perform iam authentication").Default("").StringVar(&util.Flags.IamAuthRole)
+	kingpin.Flag("iam-vault-auth-backend", "The name of the auth backend in Vault to perform iam authentication against. Defaults to `aws`.").Default("aws").StringVar(&util.Flags.IamVaultAuthBackend)
 
 	// Show version
 	kingpin.Flag("version", "Display build version").Default("false").BoolVar(&util.Flags.ShowVersion)

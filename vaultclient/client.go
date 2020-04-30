@@ -19,7 +19,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/hashicorp/vault/api"
 	jww "github.com/spf13/jwalterweatherman"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -194,6 +194,19 @@ func (vc *VaultClient) Authenticate() error {
 
 		if err != nil {
 			return fmt.Errorf("failed to authenticate to Vault server %q as an EC2 Instance: %w", vc.Config.Address, err)
+		}
+
+		return nil
+	}
+
+	// Otherwise, maybe IAM auth is requested
+
+	if util.Flags.IamAuthRole != "" {
+		err := vc.performIAMAuth()
+
+		if err != nil {
+			return fmt.Errorf("failed to authenticate to Vault server %q using IAM Role %s: %w",
+				vc.Config.Address, util.Flags.IamAuthRole, err)
 		}
 
 		return nil

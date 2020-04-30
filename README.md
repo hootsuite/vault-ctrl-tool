@@ -21,6 +21,7 @@ To play with a few examples, see [examples](docs/examples).
 | Kubernetes Service Account Tokens | Yes |
 | Passed in Vault tokens | Yes |
 | EC2 Metadata | Yes |
+| EC2 IAM | Yes |
 
 ##  Secrets
 

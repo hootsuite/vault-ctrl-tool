@@ -2,9 +2,6 @@ CURRENTOS := $(shell go env GOOS)
 CURRENTARCH := $(shell go env GOARCH)
 VERSION := dev
 
-export GOFLAGS=-mod=vendor
-unexport GOPATH
-
 build: clean test darwin-binary linux-binary copy-binary
 
 clean: ## Delete the destination directory.
@@ -23,6 +20,7 @@ linux-binary:
 copy-binary:
 	cp bin/vault-ctrl-tool.$(CURRENTOS).$(CURRENTARCH) vault-ctrl-tool
 
-vendor:
-	go mod vendor
+deps: ## Ensure dependencies are present and prune orphaned
+	go mod download
+	go mod tidy
 

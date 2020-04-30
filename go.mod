@@ -5,11 +5,14 @@ go 1.13
 require (
 	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc // indirect
 	github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf // indirect
+	github.com/aws/aws-sdk-go v1.30.16
 	github.com/cenkalti/backoff v2.1.1+incompatible
+	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hashicorp/vault/api v1.0.2
+	github.com/hashicorp/vault/sdk v0.1.13 // indirect
 	github.com/json-iterator/go v1.1.7 // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
