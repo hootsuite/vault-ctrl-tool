@@ -9,31 +9,28 @@ import (
 
 // v1 of vault-ctrl-tool had some bad ideas about parsing command line arguments. This is kept for compatibility.
 type CliFlags struct {
-	ShowVersion            bool          // Display version and exit
-	PerformInit            bool          // run in "init" mode
-	PerformSidecar         bool          // run in "sidecar" mode
-	PerformOneShot         bool          // even though running in sidecar mode, only run things once and then exit.
-	PerformCleanup         bool          // cleanup everything in the leases file
-	RevokeOnCleanup        bool          // also revoke everything when cleaning up
-	RenewInterval          time.Duration // when in sidecar mode, refresh anything expiring within this duration
-	BriefcaseFilename      string        // absolute location of briefcase
-	ShutdownTriggerFile    string        // if this file exists, the sidecar will shutdown
-	RenewLeaseDuration     time.Duration // when renewing vault token, duration to ask to have it renewed for
-	VaultTokenArg          string        // v-c-t will accept a vault token as a command line arg
-	EC2AuthEnabled         bool          // use "registered AMI" to authenticate an EC2 instance
-	EC2Nonce               string        // Nonce used for re-authenticating EC2 instances
-	IAMAuthRole            string        // Role to use when performing IAM authentication of EC2 instances
-	IAMVaultAuthBackend    string        // Override IAM auth path in Vault
-	ConfigFile             string        // location of vault-config, either relative to input prefix, or absolute
-	OutputPrefix           string        // prefix to use when writing output files
-	InputPrefix            string        // prefix to use when looking for input files
-	ServiceSecretPrefix    string        // override prefix for relative KV secrets
-	KubernetesLoginPath    string        // path to use in Vault for Kubernetes authentication
-	ServiceAccountToken    string        // path to the ServiceAccount token file for Kubernetes authentication
-	KubernetesAuthRole     string        // role to use with Kubernetes authentication
-	DebugLogLevel          bool          // enable debug logging
-	IgnoreNonRenewableAuth bool          // Ignore the problem if the vault token we have cannot be renewed
-	NeverScrub             bool          // Disable the file scrubber
+	ShowVersion         bool          // Display version and exit
+	PerformInit         bool          // run in "init" mode
+	PerformSidecar      bool          // run in "sidecar" mode
+	PerformOneShot      bool          // even though running in sidecar mode, only run things once and then exit.
+	PerformCleanup      bool          // cleanup everything in the leases file
+	RevokeOnCleanup     bool          // also revoke everything when cleaning up
+	RenewInterval       time.Duration // when in sidecar mode, this is the expected period between checks
+	BriefcaseFilename   string        // absolute location of briefcase
+	ShutdownTriggerFile string        // if this file exists, the sidecar will shutdown
+	VaultTokenArg       string        // v-c-t will accept a vault token as a command line arg
+	EC2AuthEnabled      bool          // use "registered AMI" to authenticate an EC2 instance
+	EC2Nonce            string        // Nonce used for re-authenticating EC2 instances
+	IAMAuthRole         string        // Role to use when performing IAM authentication of EC2 instances
+	IAMVaultAuthBackend string        // Override IAM auth path in Vault
+	ConfigFile          string        // location of vault-config, either relative to input prefix, or absolute
+	OutputPrefix        string        // prefix to use when writing output files
+	InputPrefix         string        // prefix to use when looking for input files
+	ServiceSecretPrefix string        // override prefix for relative KV secrets
+	KubernetesLoginPath string        // path to use in Vault for Kubernetes authentication
+	ServiceAccountToken string        // path to the ServiceAccount token file for Kubernetes authentication
+	KubernetesAuthRole  string        // role to use with Kubernetes authentication
+	DebugLogLevel       bool          // enable debug logging
 }
 
 type RunMode int
@@ -115,7 +112,7 @@ func ProcessFlags() (*CliFlags, error) {
 
 	// Sidecar options
 	kingpin.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").BoolVar(&flags.PerformSidecar)
-	kingpin.Flag("renew-lease-duration", "How long to request leases to be renewed for").Default("1h").DurationVar(&flags.RenewLeaseDuration)
+	kingpin.Flag("renew-lease-duration", "unused, kept for compatibility").Default("1h")
 	kingpin.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").StringVar(&flags.VaultTokenArg)
 
 	// Kubernetes Authentication
@@ -138,8 +135,8 @@ func ProcessFlags() (*CliFlags, error) {
 	kingpin.Flag("debug", "Log at debug level").Default("false").BoolVar(&flags.DebugLogLevel)
 
 	// Flags for smoothing out edge cases.
-	kingpin.Flag("ignore-non-renewable-auth", "Do not fail fatally if the authentication token has a limited life but is not renewable").Default("false").BoolVar(&flags.IgnoreNonRenewableAuth)
-	kingpin.Flag("never-scrub", "Don't delete outputted files if the tool fails").Default("false").BoolVar(&flags.NeverScrub)
+	kingpin.Flag("ignore-non-renewable-auth", "ignored; kept for compatibility").Default("false")
+	kingpin.Flag("never-scrub", "ignored; kept for compatibility").Default("false")
 
 	kingpin.Parse()
 

@@ -30,7 +30,7 @@ func PerformOneShotSidecar(flags util.CliFlags) error {
 		return err
 	}
 
-	return sync.PerformSync(time.Now().Add(flags.RenewInterval).Add(5*time.Minute), flags)
+	return sync.PerformSync(time.Now().Add(flags.RenewInterval).Add(time.Minute), flags)
 }
 
 func PerformInit(flags util.CliFlags) error {

@@ -13,5 +13,5 @@ type SecretLifetime string
 
 // Secrets and templates can have a lifetime associated with them, those without an explicit lifetime
 // have a "static" lifetime for backwards expectations.
-const LifetimeStatic = "static"
-const LifetimeToken = "token"
+const LifetimeStatic SecretLifetime = "static"
+const LifetimeToken SecretLifetime = "token"

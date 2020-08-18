@@ -32,8 +32,10 @@ func WriteJSONSecret(secret config.SecretType, cache briefcase.SecretsCache) err
 
 	// output all the field files
 	for _, field := range secret.Fields {
-		if err := writeField(secret, kvSecrets, field, *mode); err != nil {
-			return err
+		if field.Output != "" {
+			if err := writeField(secret, kvSecrets, field, *mode); err != nil {
+				return err
+			}
 		}
 	}
 
