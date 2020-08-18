@@ -1,4 +1,4 @@
-package cfg
+package config
 
 import (
 	"io/ioutil"
@@ -11,14 +11,14 @@ func TestEmptyFile(t *testing.T) {
 	filename := mkConfig(t, "")
 	defer os.Remove(filename)
 
-	cfg, err := ParseFile(&filename)
+	cfg, err := ReadConfig(filename, "", "")
 
 	if err != nil {
 		t.Fatalf("empty files must be ok, got error: %v", err)
 	}
 
-	if !cfg.IsEmpty() {
-		t.Fatalf("empty files must be considered empty by IsEmpty")
+	if !cfg.VaultConfig.isEmpty() {
+		t.Fatalf("empty files must be considered empty by isEmpty")
 	}
 }
 
@@ -28,14 +28,14 @@ func TestEmptyV2(t *testing.T) {
 version: 2`)
 	defer os.Remove(filename)
 
-	cfg, err := ParseFile(&filename)
+	cfg, err := ReadConfig(filename, "", "")
 
 	if err != nil {
 		t.Fatalf("empty files must be ok, got error: %v", err)
 	}
 
-	if !cfg.IsEmpty() {
-		t.Fatalf("empty files must be considered empty by IsEmpty")
+	if !cfg.VaultConfig.isEmpty() {
+		t.Fatalf("empty files must be considered empty by isEmpty")
 	}
 
 }
@@ -59,5 +59,4 @@ func mkConfig(t *testing.T, body string) string {
 	}
 
 	return filename
-
 }

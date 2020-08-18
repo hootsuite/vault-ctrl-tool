@@ -5,76 +5,35 @@ import (
 	"path"
 	"path/filepath"
 
-	jww "github.com/spf13/jwalterweatherman"
+	"github.com/rs/zerolog/log"
 )
 
-var outputPrefix, inputPrefix string
-
-func SetPrefixes(in, out *string) {
-	if in != nil {
-		inputPrefix = *in
-	} else {
-		inputPrefix = ""
-	}
-
-	if out != nil {
-		outputPrefix = *out
-	} else {
-		outputPrefix = ""
-	}
-}
-
-func AbsoluteOutputPath(filename string) string {
-	var outPath string
+func AbsolutePath(prefix string, filename string) string {
+	var calcPath string
 
 	if path.IsAbs(filename) {
 		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs to
 		// remove multiple slashes, ..'s, etc.
-		outPath = filename
+		calcPath = filename
 	} else {
-		if outputPrefix != "" {
-			outPath = path.Join(outputPrefix, filename)
+		if prefix != "" {
+			calcPath = path.Join(prefix, filename)
 		} else {
-			outPath = filename
+			calcPath = filename
 		}
 	}
 
-	abs, err := filepath.Abs(outPath)
+	abs, err := filepath.Abs(calcPath)
 	if err != nil {
-		jww.FATAL.Fatalf("Could not determine absolute output path of %q", outPath)
+		log.Fatal().Err(err).Str("prefix", prefix).Str("calculatedPath", calcPath).Msg("could not determine absolute path")
 	}
 
 	return abs
-
 }
 
-func AbsoluteInputPath(filename string) string {
-	var outPath string
-
-	if path.IsAbs(filename) {
-		// .Abs calls Clean, so even though this is absolute, we still run it through .Abs to
-		// remove multiple slashes, ..'s, etc.
-		outPath = filename
-	} else {
-		if inputPrefix != "" {
-			outPath = path.Join(inputPrefix, filename)
-		} else {
-			outPath = filename
-		}
-	}
-
-	abs, err := filepath.Abs(outPath)
-	if err != nil {
-		jww.FATAL.Fatalf("Could not determine absolute input path of %q", outPath)
-	}
-
-	return abs
-
-}
-
-func MakeDirsForFile(filename string) {
+func MustMkdirAllForFile(filename string) {
 	err := os.MkdirAll(filepath.Dir(filename), os.ModePerm)
 	if err != nil {
-		jww.FATAL.Fatalf("Failed to create all needed directories for file %q: %v", filename, err)
+		log.Fatal().Str("filename", filename).Err(err).Msg("failed to create all needed directories")
 	}
 }

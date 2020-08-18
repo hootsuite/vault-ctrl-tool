@@ -1,3 +1,4 @@
+version: 3
 # This will insert an example secret into an existing template file. Note that the "path" of the
 # secret starts with "/" so it's looked up at its absolute path.
 
@@ -7,10 +8,12 @@ secrets:
   - key: ping
     path: /secret/ping
     missingOk: false
+    lifetime: static
 templates:
   - input: template-ping/example.tpl
     output: template-ping/absolute-example.txt
     mode: 0666
+    lifetime: static
 
 
 # SETUP

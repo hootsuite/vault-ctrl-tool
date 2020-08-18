@@ -1,11 +1,28 @@
 # Tour Of vault-config.yml
 
+* [Concepts](#concepts)
 * [Vault Token](#vaultToken)
 * [Templates](#templates)
 * [Secrets](#secrets)
 * [SSH Keys](#ssh)
 * [AWS](#aws)
-* [Databases](#databases)
+
+
+### Concepts
+
+At the top of your configuration file, is a `version`. Upgrading from one configuration version to another may
+require some small changes to your configuration file.  See the README at the root of the project.
+
+Secrets and templates both have a `lifetime`. Lifetimes are how the tool knows when it needs to rewrite your
+secrets or templates. Two lifetimes are currently understood; `token` and `static`. Secrets and templates with
+static lifetimes are never rewritten once they're initially created. It is assumed the secrets in those files
+are static, and as a service using this tool, you would rather have to force restarting things in order to
+get new secrets (either by restarting your Kubernetes pod, terminating an EC2 instance in an ASG, or deleting
+the briefcase file - causing the tool to lose state).
+
+The lifetime of 'token' indicates that the secrets contained in the files become invalid if the Vault token
+being used expires. These secrets will be fetched again, and files will be rewritten out of necessity after the tool
+re-authenticates. 
 
 These examples assume you're running with `--input-prefix /etc/vault-config --output-prefix /etc/secrets`.
 
@@ -34,6 +51,7 @@ templates:
   - input: example-test.tpl
     output: example/target/test
     mode: 0777
+    lifetime: static
 # Read template from /etc/vault-config/example-test.tpl and write to /etc/secrets/example/target/test
 ```
 
@@ -55,6 +73,7 @@ secrets:
       use_key_as_prefix: true
       mode: 0777
       missingOk: true
+      lifetime: static
       fields:
         - name: api_key
           output: api/key
@@ -113,20 +132,4 @@ aws:
     mode: 0777
  # The above will output a "/etc/secrets/aws/config" and "/etc/secrets/aws/credentials" with
  # two AWS profiles ("default", and "special") which can  be specified with AWS_PROFILE. 
-```
-
-### Databases
-
-This is not yet supported.
-
-```yaml
-databases:
-  - connection:
-      vault_role: mydb1
-      key: mydb1
-      output: /tmp/mydb1.secrets
-  - connection:
-      vault_role: mydb2
-      key: mydb2
-      output: /tmp/mydb2.secrets
 ```

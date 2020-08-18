@@ -1,4 +1,4 @@
-package sshsigning
+package vaultclient
 
 import (
 	"crypto/rand"
@@ -11,12 +11,10 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/hootsuite/vault-ctrl-tool/cfg"
-	"github.com/hootsuite/vault-ctrl-tool/leases"
-	"github.com/hootsuite/vault-ctrl-tool/scrubber"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 
-	"github.com/hashicorp/vault/api"
-	jww "github.com/spf13/jwalterweatherman"
+	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/rs/zerolog"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -26,23 +24,35 @@ const SSHPrivateKey = "id_rsa"
 // SSHPublicKey is the corresponding public key, used for signing
 const SSHPublicKey = "id_rsa.pub"
 
-// SSHCertificate is public key, signed by Vault.
-const SSHCertificate = "id_rsa-cert.pub"
+func (vc *wrappedVaultClient) CreateSSHCertificate(ssh config.SSHCertificateType) error {
 
-func generateKeyPair(outputPath string) error {
+	log := vc.log.With().Str("vaultRole", ssh.VaultRole).Logger()
 
-	privateKeyFilename := filepath.Join(outputPath, SSHPrivateKey)
-	publicKeyFilename := filepath.Join(outputPath, SSHPublicKey)
+	privateKeyFilename := filepath.Join(ssh.OutputPath, SSHPrivateKey)
+	publicKeyFilename := filepath.Join(ssh.OutputPath, SSHPublicKey)
 
-	jww.INFO.Printf("Writing ssh keypair to %q and %q", privateKeyFilename, publicKeyFilename)
+	// I'd use util.MustMakeDirAllForFile, but I want to set the directory permission
+	if err := os.MkdirAll(ssh.OutputPath, 0700); err != nil {
+		return fmt.Errorf("could not make directory path %q: %w", ssh.OutputPath, err)
+	}
+
+	log.Info().Str("privateKey", privateKeyFilename).Str("publicKey", publicKeyFilename).Msg("generating SSH keypair")
+
+	if err := vc.generateKeyPair(privateKeyFilename, publicKeyFilename); err != nil {
+		return fmt.Errorf("failed to generate SSH keys: %w", err)
+	}
+	if err := vc.signKey(log, ssh.OutputPath, ssh.VaultMount, ssh.VaultRole); err != nil {
+		return fmt.Errorf("failed to sign SSH key: %w", err)
+	}
+
+	return nil
+}
+
+func (vc *wrappedVaultClient) generateKeyPair(privateKeyFilename, publicKeyFilename string) error {
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return fmt.Errorf("could not generate RSA key: %w", err)
-	}
-
-	if err := os.MkdirAll(outputPath, 0700); err != nil {
-		return fmt.Errorf("could not make directory path %q: %w", outputPath, err)
 	}
 
 	// Write a SSH private key..
@@ -51,8 +61,6 @@ func generateKeyPair(outputPath string) error {
 		return fmt.Errorf("could not create private key file %q: %w", privateKeyFilename, err)
 	}
 	defer privateKeyFile.Close()
-
-	scrubber.AddFile(privateKeyFilename)
 
 	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
 	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
@@ -70,49 +78,17 @@ func generateKeyPair(outputPath string) error {
 		return fmt.Errorf("could not write public SSH key %q: %w", publicKeyFilename, err)
 
 	}
-	scrubber.AddFile(publicKeyFilename)
 	return nil
 
 }
 
-func WriteKeys(currentConfig cfg.Config, client *api.Client) error {
+func (vc *wrappedVaultClient) signKey(log zerolog.Logger, outputPath string, vaultMount string, vaultRole string) error {
+	log.Debug().Str("outputPath", outputPath).Str("vaultMount", vaultMount).Msg("signing SSH keys")
 
-	for _, sshConfig := range currentConfig.SSH {
-		if err := generateKeyPair(sshConfig.OutputPath); err != nil {
-			return fmt.Errorf("failed to generate SSH keys: %w", err)
-		}
-		if err := SignKey(client, sshConfig.OutputPath, sshConfig.VaultMount, sshConfig.VaultRole); err != nil {
-			return fmt.Errorf("failed to sign SSH key: %w", err)
-		}
-		leases.EnrollSSH(sshConfig)
-	}
-	return nil
-}
-
-func ReadCertificateValidBefore(certificate string) (uint64, error) {
-	certificateBytes, err := ioutil.ReadFile(certificate)
-	if err != nil {
-		return 0, fmt.Errorf("could not read certificate file %q: %w", certificate, err)
-	}
-
-	cert, err := ssh.ParsePublicKey(certificateBytes)
-	if err != nil {
-		return 0, fmt.Errorf("could not parse SSH certificate %q: %w", certificate, err)
-	}
-	sshCert, ok := cert.(*ssh.Certificate)
-	if !ok {
-		return 0, fmt.Errorf("could not parse certificate %q", certificate)
-	}
-
-	return sshCert.ValidBefore, nil
-}
-
-func SignKey(client *api.Client, outputPath string, vaultMount string, vaultRole string) error {
-	jww.DEBUG.Printf("Signing keys in %q with certificate at %q and role %q", outputPath, vaultMount, vaultRole)
-	vaultSSH := client.SSHWithMountPoint(vaultMount)
+	vaultSSH := vc.Delegate().SSHWithMountPoint(vaultMount)
 
 	publicKeyFilename := filepath.Join(outputPath, SSHPublicKey)
-	certificateFilename := filepath.Join(outputPath, SSHCertificate)
+	certificateFilename := filepath.Join(outputPath, util.SSHCertificate)
 
 	publicKeyBytes, err := ioutil.ReadFile(publicKeyFilename)
 	if err != nil {
@@ -129,17 +105,18 @@ func SignKey(client *api.Client, outputPath string, vaultMount string, vaultRole
 	signedKey := resp.Data["signed_key"]
 	if signedKey == nil {
 		return fmt.Errorf("did not receive a signed_key from Vault at %q when signing key at %q with \"%s/sign/%s\"",
-			client.Address(), outputPath, vaultMount, vaultRole)
+			vc.Delegate().Address(), outputPath, vaultMount, vaultRole)
 	}
 	signedKeyString, ok := resp.Data["signed_key"].(string)
 	if !ok {
 		return fmt.Errorf("could not convert signed_key to string")
 	}
 
-	jww.INFO.Printf("Writing ssh certificate to %q", certificateFilename)
+	log.Info().Str("certificateFile", certificateFilename).Msg("writing SSH certificate")
+
 	if err := ioutil.WriteFile(certificateFilename, []byte(signedKeyString), 0600); err != nil {
 		return fmt.Errorf("could not write certificate file: %w", err)
 	}
-	scrubber.AddFile(certificateFilename)
+
 	return nil
 }

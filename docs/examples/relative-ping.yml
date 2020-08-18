@@ -1,3 +1,4 @@
+version: 3
 # This will insert an example secret into an existing template file.
 # Note the path is relative, so v-c-t prefixes it automatically with /secret/application-config/services/secret/
 # This can be overridden with --secret-prefix.
@@ -8,10 +9,12 @@ secrets:
   - key: ping
     path: ping
     missingOk: false
+    lifetime: static
 templates:
   - input: template-ping/relative-example.tpl
     output: template-ping/relative-example.txt
     mode: 0666
+    lifetime: static
 
 
 # SETUP
