@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -15,12 +14,19 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/hashicorp/vault/api"
-	"github.com/hootsuite/vault-ctrl-tool/util"
-	jww "github.com/spf13/jwalterweatherman"
 )
 
+func (auth *ec2iamAuthenticator) Authenticate() (*api.Secret, error) {
+	secret, err := auth.performEC2IAMAuth()
+	if err != nil {
+		auth.log.Error().Err(err).Msg("ec2 iam authentication failed")
+		return nil, err
+	}
+	return secret, nil
+}
+
 //stsSigningResolver is borrowed from https://github.com/hashicorp/vault/blob/master/builtin/credential/aws/cli.go
-func stsSigningResolver(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
+func (auth *ec2iamAuthenticator) stsSigningResolver(service, region string, optFns ...func(*endpoints.Options)) (endpoints.ResolvedEndpoint, error) {
 	defaultEndpoint, err := endpoints.DefaultResolver().EndpointFor(service, region, optFns...)
 	if err != nil {
 		return defaultEndpoint, err
@@ -31,14 +37,14 @@ func stsSigningResolver(service, region string, optFns ...func(*endpoints.Option
 }
 
 //generateLoginData is borrowed from https://github.com/hashicorp/vault/blob/master/builtin/credential/aws/cli.go
-func generateLoginData(creds *credentials.Credentials, configuredRegion string) (map[string]interface{}, error) {
+func (auth *ec2iamAuthenticator) generateLoginData(creds *credentials.Credentials, configuredRegion string) (map[string]interface{}, error) {
 	loginData := make(map[string]interface{})
 
 	stsSession, err := session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
 			Credentials:      creds,
 			Region:           &configuredRegion,
-			EndpointResolver: endpoints.ResolverFunc(stsSigningResolver),
+			EndpointResolver: endpoints.ResolverFunc(auth.stsSigningResolver),
 		},
 	})
 	if err != nil {
@@ -49,7 +55,9 @@ func generateLoginData(creds *credentials.Credentials, configuredRegion string) 
 	svc := sts.New(stsSession)
 	stsRequest, _ := svc.GetCallerIdentityRequest(params)
 
-	stsRequest.Sign()
+	if err := stsRequest.Sign(); err != nil {
+		return nil, err
+	}
 
 	// Now extract out the relevant parts of the request
 	headersJson, err := json.Marshal(stsRequest.HTTPRequest.Header)
@@ -69,13 +77,9 @@ func generateLoginData(creds *credentials.Credentials, configuredRegion string) 
 	return loginData, nil
 }
 
-func getSecret(c *api.Client, creds *credentials.Credentials, authBackendName string) (*api.Secret, error) {
-	region := os.Getenv("AWS_DEFAULT_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
+func (auth *ec2iamAuthenticator) getSecret(creds *credentials.Credentials) (*api.Secret, error) {
 
-	loginData, err := generateLoginData(creds, region)
+	loginData, err := auth.generateLoginData(creds, auth.awsRegion)
 	if err != nil {
 		return nil, err
 	}
@@ -83,9 +87,9 @@ func getSecret(c *api.Client, creds *credentials.Credentials, authBackendName st
 		return nil, fmt.Errorf("got nil response from generateLoginData")
 	}
 
-	loginData["role"] = util.Flags.IamAuthRole
+	loginData["role"] = auth.iamAuthRole
 
-	secret, err := c.Logical().Write(fmt.Sprintf("auth/%s/login", authBackendName), loginData)
+	secret, err := auth.vaultClient.Delegate().Logical().Write(fmt.Sprintf("auth/%s/login", auth.iamVaultAuthBackend), loginData)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +100,7 @@ func getSecret(c *api.Client, creds *credentials.Credentials, authBackendName st
 	return secret, nil
 }
 
-func getCredentialsFromRole() (*credentials.Credentials, error) {
+func (auth *authenticator) getCredentialsFromRole() (*credentials.Credentials, error) {
 	awsSession, err := session.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("could not create a new session to use with the AWS SDK: %w", err)
@@ -115,28 +119,22 @@ func getCredentialsFromRole() (*credentials.Credentials, error) {
 	return creds, nil
 }
 
-func (vc *VaultClient) performIAMAuth() error {
+func (auth *ec2iamAuthenticator) performEC2IAMAuth() (*api.Secret, error) {
 
-	jww.INFO.Printf("Getting AWS IAM Role credentials")
-	creds, err := getCredentialsFromRole()
+	auth.log.Info().Msg("starting authenticating with IAM role")
+
+	creds, err := auth.getCredentialsFromRole()
 	if err != nil {
-		return fmt.Errorf("could not get IAM Role credentials: %w", err)
+		return nil, fmt.Errorf("could not get IAM Role credentials: %w", err)
 	}
 
-	jww.INFO.Printf("Authenticating to vault at %q using role %s against the %s backend", vc.Config.Address, util.Flags.IamAuthRole, util.Flags.IamVaultAuthBackend)
-	secret, err := getSecret(vc.Delegate, creds, util.Flags.IamVaultAuthBackend)
+	auth.log.Info().Str("role", auth.iamAuthRole).Str("vault_auth_path", auth.iamVaultAuthBackend).Msg("performing authentication")
+
+	secret, err := auth.getSecret(creds)
 
 	if err != nil {
-		return fmt.Errorf("could not authenticate to vault using IAM role authentication: %w", err)
+		return nil, fmt.Errorf("could not authenticate to vault using IAM role authentication: %w", err)
 	}
 
-	token, err := secret.TokenID()
-	if err != nil {
-		return fmt.Errorf("could not extract Vault token: %w", err)
-	}
-
-	vc.AuthToken = secret
-	vc.Delegate.SetToken(token)
-
-	return nil
+	return secret, nil
 }

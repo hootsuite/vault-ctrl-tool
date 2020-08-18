@@ -1,8 +1,26 @@
 # Using Kubernetes
 
-Vault Control Tool can easily be run as both an init container to populate various files, as well as a sidecar to
-keep leases fresh while your service is running. You will need a Service Account, some mounts for the configuration
-and leases, configuration for the init and sidecar containers and then the actual vault configuration. 
+Vault Control Tool can easily be run as both an init container to populate various files, and a sidecar to
+keep vault tokens and short-lived credentials fresh while your service is running. You will need a Service Account, 
+some mounts for the configuration and leases, configuration for the init and sidecar containers and then the actual
+vault configuration. 
+
+## Failure Handling
+
+By default, Vault tokens live for an absolute maximum of 31 days (this is tuned in each authentication backend), they
+cannot be renewed beyond this and are expired by the server. If this is your setup, Vault Control Tool will
+re-authenticate using the ServiceAccount (obtaining a new token), and re-fetch any AWS credentials, vault token files, 
+SSH certificates, and secrets/templates with a "token" lifetime. 
+
+This can also happen sooner if Vault Control Tool is unable to successfully contact the Vault server and renew the
+token before its TTL passes.
+
+If a token expires, credentials a service is using will cease to work. Because of the nature of Kubernetes pods, services
+can either manually catch this and reread configuration files, or can exit when this happens, allowing Kubernetes to
+restart their container and read in the new credentials.
+
+If you are using secrets or templates with "token" lifetimes, it is recommended to tune your Kubernetes authentication
+backend to never expire tokens, but instead issue them with a "period" that must be refreshed by the sidecar.
 
 ## Service Account
 
@@ -88,7 +106,6 @@ configuration is only needed for the init container.
         command:
           - "/vault-ctrl-tool"
           - "--init"
-          - "--json-log"
           - "--k8s-auth-role"
           - "my-example"
           - "--input-prefix"
@@ -128,7 +145,6 @@ configuration is only needed for the init container.
         command:
           - "/vault-ctrl-tool"
           - "--sidecar"
-          - "--json-log"
           - "--input-prefix"
           - "/etc/vault-config"
           - "--output-prefix"
