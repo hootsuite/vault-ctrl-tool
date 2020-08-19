@@ -54,7 +54,7 @@ func main() {
 		}
 	case util.ModeCleanup:
 		if err := PerformCleanup(*flags); err != nil {
-			panic(err)
+			fmt.Printf("Cleanup failed: %s\n", err)
 		}
 	case util.ModeUnknown:
 		panic("unknown run mode")
