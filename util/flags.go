@@ -155,6 +155,10 @@ func ProcessFlags() (*CliFlags, error) {
 		actions++
 	}
 
+	if flags.ShowVersion {
+		actions++
+	}
+
 	if flags.PerformCleanup {
 		actions++
 		if flags.PerformOneShot {

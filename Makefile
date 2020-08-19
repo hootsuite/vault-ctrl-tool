@@ -11,10 +11,10 @@ test:
 	go test -v ./...
 
 darwin-binary:
-	GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.buildVersion=$(VERSION)" -o bin/vault-ctrl-tool.darwin.amd64 .
+	GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-X main.buildVersion=$(VERSION)" -o bin/vault-ctrl-tool.darwin.amd64 .
 
 linux-binary:
-	GOOS=linux GOARCH=amd64 go build -ldflags "-X main.buildVersion=$(VERSION)" -o bin/vault-ctrl-tool.linux.amd64 .
+	GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-X main.buildVersion=$(VERSION)" -o bin/vault-ctrl-tool.linux.amd64 .
 
 # Useful when doing development
 copy-binary:
