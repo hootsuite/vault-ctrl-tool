@@ -35,9 +35,9 @@ func (auth *kubernetesAuthenticator) performKubernetesAuth() (*api.Secret, error
 
 	if err == nil {
 		return secret, nil
-	} else {
-		auth.log.Debug().Err(err).Msg("could not authenticate using hard-coded ConfigMap vault-token - ignoring")
 	}
+
+	auth.log.Debug().Err(err).Msg("could not authenticate using hard-coded ConfigMap vault-token - ignoring")
 
 	auth.log.Info().Str("serviceAccountToken", auth.serviceAccountToken).Msg("reading service account token")
 
@@ -83,27 +83,27 @@ func (auth *kubernetesAuthenticator) tryHardCodedToken() (*api.Secret, error) {
 		// If we cannot create the in cluster config, that means we are not running inside of Kubernetes
 		if err != nil {
 			return nil, fmt.Errorf("could not create cluster config - this will fail if this is running outside of Kubernetes: %w", err)
-		} else {
-			clientset, err := kubernetes.NewForConfig(config)
-			if err != nil {
-				return nil, fmt.Errorf("could not create ClientSet to call Kubernetes API: %w", err)
-			} else {
-				configMaps, err := clientset.CoreV1().ConfigMaps("default").List(context.Background(), v1.ListOptions{FieldSelector: "metadata.name=vault-token"})
-				if err != nil {
-					return nil, fmt.Errorf("failed to get ConfigMaps filtered on the metadata.name=vault-token")
-				} else if len(configMaps.Items) == 1 {
-					if token, exists := configMaps.Items[0].Data["token"]; exists {
-						auth.log.Info().Msg("logging into Vault server %q with token from vault-token ConfigMap")
+		}
 
-						secret, err := auth.vaultClient.VerifyVaultToken(token)
-						if err != nil {
-							return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
-						}
-						return secret, nil
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			return nil, fmt.Errorf("could not create ClientSet to call Kubernetes API: %w", err)
+		} else {
+			configMaps, err := clientset.CoreV1().ConfigMaps("default").List(context.Background(), v1.ListOptions{FieldSelector: "metadata.name=vault-token"})
+			if err != nil {
+				return nil, fmt.Errorf("failed to get ConfigMaps filtered on the metadata.name=vault-token")
+			} else if len(configMaps.Items) == 1 {
+				if token, exists := configMaps.Items[0].Data["token"]; exists {
+					auth.log.Info().Msg("logging into Vault server %q with token from vault-token ConfigMap")
+
+					secret, err := auth.vaultClient.VerifyVaultToken(token)
+					if err != nil {
+						return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
 					}
-				} else {
-					return nil, errors.New("multiple ConfigMaps were returned when filtering ConfigMaps with metadata.name=vault-token; please remove all but one")
+					return secret, nil
 				}
+			} else {
+				return nil, errors.New("multiple ConfigMaps were returned when filtering ConfigMaps with metadata.name=vault-token; please remove all but one")
 			}
 		}
 	}

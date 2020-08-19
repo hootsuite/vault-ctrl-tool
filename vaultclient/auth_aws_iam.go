@@ -60,7 +60,7 @@ func (auth *ec2iamAuthenticator) generateLoginData(creds *credentials.Credential
 	}
 
 	// Now extract out the relevant parts of the request
-	headersJson, err := json.Marshal(stsRequest.HTTPRequest.Header)
+	headersJSON, err := json.Marshal(stsRequest.HTTPRequest.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (auth *ec2iamAuthenticator) generateLoginData(creds *credentials.Credential
 
 	loginData["iam_http_request_method"] = stsRequest.HTTPRequest.Method
 	loginData["iam_request_url"] = base64.StdEncoding.EncodeToString([]byte(stsRequest.HTTPRequest.URL.String()))
-	loginData["iam_request_headers"] = base64.StdEncoding.EncodeToString(headersJson)
+	loginData["iam_request_headers"] = base64.StdEncoding.EncodeToString(headersJSON)
 	loginData["iam_request_body"] = base64.StdEncoding.EncodeToString(requestBody)
 
 	return loginData, nil

@@ -6,7 +6,6 @@ import (
 )
 
 func TestStringToFileMode(t *testing.T) {
-
 	if mode, e := StringToFileMode(""); mode == nil || *mode != os.FileMode(0400) || e != nil {
 		t.Errorf("Empty file mode must default to 0400, not %v.", *mode)
 	}
