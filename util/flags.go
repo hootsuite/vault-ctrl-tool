@@ -54,7 +54,6 @@ const (
 )
 
 func (f *CliFlags) AuthMechanism() AuthMechanismType {
-
 	if f.KubernetesAuthRole != "" {
 		return KubernetesAuth
 	}
@@ -82,9 +81,8 @@ func (f *CliFlags) RunMode() RunMode {
 	if f.PerformSidecar {
 		if f.PerformOneShot {
 			return ModeOneShotSidecar
-		} else {
-			return ModeSidecar
 		}
+		return ModeSidecar
 	}
 
 	if f.PerformCleanup {
@@ -112,7 +110,7 @@ func ProcessFlags() (*CliFlags, error) {
 
 	// Sidecar options
 	kingpin.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").BoolVar(&flags.PerformSidecar)
-	kingpin.Flag("renew-lease-duration", "unused, kept for compatibility").Default("1h")
+	kingpin.Flag("renew-lease-duration", "unused, kept for compatibility").Default("1h").Duration()
 	kingpin.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").StringVar(&flags.VaultTokenArg)
 
 	// Kubernetes Authentication
@@ -135,8 +133,8 @@ func ProcessFlags() (*CliFlags, error) {
 	kingpin.Flag("debug", "Log at debug level").Default("false").BoolVar(&flags.DebugLogLevel)
 
 	// Flags for smoothing out edge cases.
-	kingpin.Flag("ignore-non-renewable-auth", "ignored; kept for compatibility").Default("false")
-	kingpin.Flag("never-scrub", "ignored; kept for compatibility").Default("false")
+	kingpin.Flag("ignore-non-renewable-auth", "ignored; kept for compatibility").Default("false").Bool()
+	kingpin.Flag("never-scrub", "ignored; kept for compatibility").Default("false").Bool()
 
 	kingpin.Parse()
 

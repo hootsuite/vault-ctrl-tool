@@ -67,7 +67,6 @@ func WriteJSONSecret(secret config.SecretType, cache briefcase.SecretsCache) err
 				return fmt.Errorf("failed to save secrets into %q: %w", secret.Output, err)
 			}
 		}
-
 	}
 	return nil
 }

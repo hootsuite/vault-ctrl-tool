@@ -24,7 +24,11 @@ func WriteAWSSTSCreds(creds *vaultclient.AWSSTSCredential, awsConfig config.AWST
 
 	util.MustMkdirAllForFile(wipCfgFilename)
 
-	err = writeWIPFiles(wipCfgFilename, wipCredsFilename, creds, awsConfig.Profile, awsConfig.Region, *mode)
+	if err := writeWIPFiles(wipCfgFilename, wipCredsFilename, creds, awsConfig.Profile, awsConfig.Region, *mode); err != nil {
+		_ = os.Remove(wipCredsFilename)
+		_ = os.Remove(wipCredsFilename)
+		return err
+	}
 
 	cfgFilename := strings.TrimSuffix(wipCfgFilename, ".wip")
 	credsFilename := strings.TrimSuffix(wipCredsFilename, ".wip")

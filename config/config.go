@@ -86,7 +86,6 @@ type ControlToolConfig struct {
 }
 
 func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
-
 	if configFile == "" {
 		return nil, fmt.Errorf("a --config file is required to be specified")
 	}
