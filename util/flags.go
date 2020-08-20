@@ -63,7 +63,7 @@ func (f *CliFlags) AuthMechanism() AuthMechanismType {
 	}
 
 	if f.IAMAuthRole != "" {
-		return EC2AMIAuth
+		return EC2IAMAuth
 	}
 
 	return UnknownAuth
