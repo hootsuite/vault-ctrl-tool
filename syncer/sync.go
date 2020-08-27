@@ -194,7 +194,7 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 	for _, secret := range s.config.VaultConfig.Secrets {
 		log := s.log.With().Interface("secretCfg", secret).Logger()
 		log.Debug().Msg("checking secret")
-		if s.briefcase.ShouldRefreshJSONSecret(secret) {
+		if s.briefcase.ShouldRefreshSecret(secret) {
 			updates++
 			log.Debug().Msg("refreshing secret")
 			if secret.Lifetime == util.LifetimeToken {
@@ -207,12 +207,35 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 				return err
 			}
 
-			if err := secrets.WriteJSONSecret(secret, s.briefcase); err != nil {
-				log.Error().Err(err).Msg("failed to write JSON secret")
+			if err := secrets.WriteSecret(secret, s.briefcase); err != nil {
+				log.Error().Err(err).Msg("failed to write secret")
 				return err
 			}
-			log.Debug().Msg("enrolling JSON secret")
-			s.briefcase.EnrollJSONSecret(secret)
+			s.briefcase.EnrollSecret(secret)
+		}
+	}
+
+	for _, composite := range s.config.Composites {
+		log := s.log.With().Interface("compositeFilename", composite.Filename).Logger()
+		log.Debug().Msg("checking composite secret")
+		if s.briefcase.ShouldRefreshComposite(*composite) {
+			updates++
+			log.Debug().Msg("refreshing composite")
+			if composite.Lifetime == util.LifetimeToken {
+				if err := s.cacheSecrets(util.LifetimeToken); err != nil {
+					return err
+				}
+			}
+			if err := s.cacheSecrets(util.LifetimeStatic); err != nil {
+				return err
+			}
+
+			if err := secrets.WriteComposite(*composite, s.briefcase); err != nil {
+				log.Error().Err(err).Msg("failed to write composite json secret")
+				return err
+			}
+			log.Debug().Msg("enrolling composite secret")
+			s.briefcase.EnrollComposite(*composite)
 		}
 	}
 

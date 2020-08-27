@@ -12,15 +12,56 @@ import (
 	zlog "github.com/rs/zerolog/log"
 )
 
-func WriteJSONSecret(secret config.SecretType, cache briefcase.SecretsCache) error {
+func WriteComposite(composite config.CompositeSecretFile, cache briefcase.SecretsCache) error {
+	log := zlog.With().Str("filename", composite.Filename).Logger()
+
+	log.Debug().Interface("compositeCfg", composite).Msg("writing composite secrets file")
+
+	util.MustMkdirAllForFile(composite.Filename)
+	util.MakeWritable(composite.Filename)
+	file, err := os.OpenFile(composite.Filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, composite.Mode)
+
+	if err != nil {
+		return fmt.Errorf("couldn't open file %q: %w", composite.Filename, err)
+	}
+
+	defer file.Close()
 
 	var kvSecrets []briefcase.SimpleSecret
 
 	// make a copy
-	kvSecrets = append(kvSecrets, cache.StaticSecrets()...)
+	kvSecrets = append(kvSecrets, cache.GetStaticSecrets()...)
+
+	if composite.Lifetime == util.LifetimeToken {
+		kvSecrets = append(kvSecrets, cache.GetTokenSecrets()...)
+	}
+
+	data, err := collectSecrets(log, composite, kvSecrets)
+
+	if err != nil {
+		return fmt.Errorf("could not output secrets file: %w", err)
+	}
+
+	if len(data) > 0 {
+		err = json.NewEncoder(file).Encode(&data)
+
+		if err != nil {
+			return fmt.Errorf("failed to save secrets into %q: %w", composite.Filename, err)
+		}
+	}
+
+	return nil
+}
+
+func WriteSecret(secret config.SecretType, cache briefcase.SecretsCache) error {
+
+	var kvSecrets []briefcase.SimpleSecret
+
+	// make a copy
+	kvSecrets = append(kvSecrets, cache.GetStaticSecrets()...)
 
 	if secret.Lifetime == util.LifetimeToken {
-		kvSecrets = append(kvSecrets, cache.TokenSecrets()...)
+		kvSecrets = append(kvSecrets, cache.GetTokenSecrets()...)
 	}
 
 	mode, err := util.StringToFileMode(secret.Mode)
@@ -35,36 +76,6 @@ func WriteJSONSecret(secret config.SecretType, cache briefcase.SecretsCache) err
 		if field.Output != "" {
 			if err := writeField(secret, kvSecrets, field, *mode); err != nil {
 				return err
-			}
-		}
-	}
-
-	// If all secrets need to go to an output file..
-	if secret.Output != "" {
-
-		util.MustMkdirAllForFile(secret.Output)
-
-		file, err := os.OpenFile(secret.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
-
-		if err != nil {
-			return fmt.Errorf("couldn't open file %q: %w", secret.Output, err)
-		}
-
-		defer file.Close()
-
-		log := zlog.With().Str("filename", secret.Output).Logger()
-
-		data, err := collectSecrets(log, secret, kvSecrets)
-
-		if err != nil {
-			return fmt.Errorf("could not output secrets file: %w", err)
-		}
-
-		if len(data) > 0 {
-			err = json.NewEncoder(file).Encode(&data)
-
-			if err != nil {
-				return fmt.Errorf("failed to save secrets into %q: %w", secret.Output, err)
 			}
 		}
 	}
@@ -83,6 +94,7 @@ func writeField(secret config.SecretType, kvSecrets []briefcase.SimpleSecret, fi
 
 	} else {
 		util.MustMkdirAllForFile(field.Output)
+		util.MakeWritable(field.Output)
 		file, err := os.OpenFile(field.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 		if err != nil {
 			return fmt.Errorf("couldn't open file %q: %w", field.Output, err)
@@ -111,35 +123,37 @@ func findSimpleSecretValue(secrets []briefcase.SimpleSecret, key, field string) 
 	return nil
 }
 
-func collectSecrets(log zerolog.Logger, secret config.SecretType, kvSecrets []briefcase.SimpleSecret) (map[string]interface{}, error) {
+func collectSecrets(log zerolog.Logger, composite config.CompositeSecretFile, kvSecrets []briefcase.SimpleSecret) (map[string]interface{}, error) {
 
 	data := make(map[string]interface{})
 
-	log.Info().Str("key", secret.Key).Msg("collecting secret")
-	if secret.UseKeyAsPrefix {
+	log.Info().Msg("collecting composite secrets")
 
-		for _, s := range kvSecrets {
-			if s.Key == secret.Key {
-				key := secret.Key + "_" + s.Field
-				if _, dupe := data[key]; dupe {
-					log.Error().Str("field", s.Field).Str("prefix", secret.Key).Msg("the secret with this prefix causes there to be a duplicate entry")
-					return nil, fmt.Errorf("the secret field %q with prefix %q causes there to be a duplicate",
-						s.Field, secret.Key)
+	for _, secret := range composite.Secrets {
+		if secret.UseKeyAsPrefix {
+			for _, s := range kvSecrets {
+				if s.Key == secret.Key {
+					key := secret.Key + "_" + s.Field
+					if _, dupe := data[key]; dupe {
+						log.Error().Str("field", s.Field).Str("prefix", secret.Key).Msg("the secret with this prefix causes there to be a duplicate entry")
+						return nil, fmt.Errorf("the secret field %q with prefix %q causes there to be a duplicate",
+							s.Field, secret.Key)
+					}
+					zlog.Debug().Str("key", key).Msg("collecting key")
+					data[key] = s.Value
 				}
-				zlog.Debug().Str("key", key).Msg("collecting key")
-				data[key] = s.Value
 			}
-		}
-	} else {
-		for _, s := range kvSecrets {
-			if s.Key == secret.Key {
+		} else {
+			for _, s := range kvSecrets {
+				if s.Key == secret.Key {
 
-				if _, dupe := data[s.Field]; dupe {
-					log.Error().Str("field", s.Field).Msg("this field causes there to be a duplicate entry")
-					return nil, fmt.Errorf("the secret field %q causes there to be a duplicate", s.Field)
+					if _, dupe := data[s.Field]; dupe {
+						log.Error().Str("field", s.Field).Msg("this field causes there to be a duplicate entry")
+						return nil, fmt.Errorf("the secret field %q causes there to be a duplicate", s.Field)
+					}
+					data[s.Field] = s.Value
+					zlog.Debug().Str("field", s.Field).Msg("collecting field")
 				}
-				data[s.Field] = s.Value
-				zlog.Debug().Str("field", s.Field).Msg("collecting field")
 			}
 		}
 	}

@@ -34,6 +34,10 @@ func PerformOneShotSidecar(flags util.CliFlags) error {
 }
 
 func PerformInit(flags util.CliFlags) error {
+	if stat, err := os.Stat(flags.BriefcaseFilename); err == nil && stat != nil {
+		zlog.Warn().Str("filename", flags.BriefcaseFilename).Msg("running in init mode, but briefcase file already exists")
+	}
+
 	sync, err := syncer.SetupSyncer(flags, briefcase.NewBriefcase())
 
 	if err != nil {

@@ -53,6 +53,8 @@ func writeWIPFiles(configFilename, credentialsFilename string,
 
 	log.Debug().Str("awsConfig", configFilename).Str("awsCredentials", credentialsFilename).Msg("writing AWS files")
 
+	util.MustMkdirAllForFile(configFilename)
+	util.MakeWritable(configFilename)
 	configFile, err := os.OpenFile(configFilename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, mode)
 
 	if err != nil {
@@ -60,6 +62,7 @@ func writeWIPFiles(configFilename, credentialsFilename string,
 	}
 	defer configFile.Close()
 
+	util.MakeWritable(credentialsFilename)
 	credsFile, err := os.OpenFile(credentialsFilename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, mode)
 
 	if err != nil {

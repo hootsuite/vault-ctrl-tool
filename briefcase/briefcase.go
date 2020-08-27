@@ -20,9 +20,11 @@ type Briefcase struct {
 	SSHCertificates        map[string]sshCert             `json:"ssh,omitempty"`
 	AWSCredentialLeases    map[string]leasedAWSCredential `json:"aws,omitempty"`
 	TokenScopedTemplates   map[string]bool                `json:"tokenscoped_templates,omitempty"`
-	StaticTemplates        map[string]bool                `json:"templates,omitempty"`
-	TokenScopedJSONSecrets map[string]bool                `json:"tokenscoped_json_secrets,omitempty"`
-	StaticJSONSecrets      map[string]bool                `json:"json_secrets,omitempty"`
+	StaticTemplates        map[string]bool                `json:"static_templates,omitempty"`
+	TokenScopedSecrets     map[string]bool                `json:"tokenscoped_secrets,omitempty"`
+	StaticScopedSecrets    map[string]bool                `json:"static_secrets,omitempty"`
+	TokenScopedComposites  map[string]bool                `json:"tokenscoped_composites,omitempty"`
+	StaticScopedComposites map[string]bool                `json:"static_composites,omitempty"`
 
 	// cache of secrets, not persisted
 	tokenScopedCache  []SimpleSecret
@@ -61,8 +63,10 @@ func NewBriefcase() *Briefcase {
 		SSHCertificates:        make(map[string]sshCert),
 		TokenScopedTemplates:   make(map[string]bool),
 		StaticTemplates:        make(map[string]bool),
-		TokenScopedJSONSecrets: make(map[string]bool),
-		StaticJSONSecrets:      make(map[string]bool),
+		TokenScopedSecrets:     make(map[string]bool),
+		StaticScopedSecrets:    make(map[string]bool),
+		TokenScopedComposites:  make(map[string]bool),
+		StaticScopedComposites: make(map[string]bool),
 		log:                    zlog.Logger,
 	}
 }
@@ -72,7 +76,8 @@ func NewBriefcase() *Briefcase {
 // all the non-static secrets to be recreated.
 func ResetBriefcase(old *Briefcase) *Briefcase {
 	newBriefcase := NewBriefcase()
-	newBriefcase.StaticJSONSecrets = old.StaticJSONSecrets
+	newBriefcase.StaticScopedSecrets = old.StaticScopedSecrets
+	newBriefcase.StaticScopedComposites = old.StaticScopedComposites
 	newBriefcase.StaticTemplates = old.StaticTemplates
 	newBriefcase.staticScopedCache = old.staticScopedCache
 	return newBriefcase
@@ -139,6 +144,7 @@ func (b *Briefcase) SaveAs(filename string) error {
 
 	b.log.Info().Str("filename", filename).Msg("storing briefcase")
 	util.MustMkdirAllForFile(filename)
+	util.MakeWritable(filename)
 	if err := ioutil.WriteFile(filename, bytes, 0600); err != nil {
 		b.log.Error().Err(err).Str("filename", filename).Msg("failed to write briefcase file")
 		return err

@@ -17,12 +17,12 @@ func WriteTemplate(tpl config.TemplateType, templates map[string]*template.Templ
 
 	tplVars := make(map[string]interface{})
 
-	for _, s := range cache.StaticSecrets() {
+	for _, s := range cache.GetStaticSecrets() {
 		tplVars[s.Key+"_"+s.Field] = s.Value
 	}
 
 	if tpl.Lifetime == util.LifetimeToken {
-		for _, s := range cache.TokenSecrets() {
+		for _, s := range cache.GetTokenSecrets() {
 			key := s.Key + "_" + s.Field
 			if _, dupe := tplVars[key]; dupe {
 				log.Warn().Str("key", key).Msg("overwriting static secret key with a value from a token-scoped secret")
@@ -43,6 +43,7 @@ func WriteTemplate(tpl config.TemplateType, templates map[string]*template.Templ
 	log.Info().Str("input", tpl.Input).Msg("resolving template")
 
 	util.MustMkdirAllForFile(tpl.Output)
+	util.MakeWritable(tpl.Output)
 	file, err := os.OpenFile(tpl.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 	if err != nil {
 		return err

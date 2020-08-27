@@ -55,6 +55,7 @@ func (vc *wrappedVaultClient) generateKeyPair(privateKeyFilename, publicKeyFilen
 		return fmt.Errorf("could not generate RSA key: %w", err)
 	}
 
+	util.MakeWritable(privateKeyFilename)
 	// Write a SSH private key..
 	privateKeyFile, err := os.OpenFile(privateKeyFilename, syscall.O_RDWR|syscall.O_CREAT|syscall.O_TRUNC, 0600)
 	if err != nil {
@@ -72,6 +73,9 @@ func (vc *wrappedVaultClient) generateKeyPair(privateKeyFilename, publicKeyFilen
 	if err != nil {
 		return fmt.Errorf("could not create public SSH key %q: %w", publicKeyFilename, err)
 	}
+
+	util.MustMkdirAllForFile(publicKeyFilename)
+	util.MakeWritable(publicKeyFilename)
 
 	err = ioutil.WriteFile(publicKeyFilename, ssh.MarshalAuthorizedKey(pub), 0600)
 	if err != nil {
@@ -113,6 +117,9 @@ func (vc *wrappedVaultClient) signKey(log zerolog.Logger, outputPath string, vau
 	}
 
 	log.Info().Str("certificateFile", certificateFilename).Msg("writing SSH certificate")
+
+	util.MustMkdirAllForFile(certificateFilename)
+	util.MakeWritable(certificateFilename)
 
 	if err := ioutil.WriteFile(certificateFilename, []byte(signedKeyString), 0600); err != nil {
 		return fmt.Errorf("could not write certificate file: %w", err)

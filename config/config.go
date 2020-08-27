@@ -80,9 +80,17 @@ type VaultConfig struct {
 	log zerolog.Logger
 }
 
+type CompositeSecretFile struct {
+	Filename string
+	Mode     os.FileMode
+	Lifetime util.SecretLifetime // if one secret is token-scoped, then the whole file becomes token scoped.
+	Secrets  []SecretType
+}
+
 type ControlToolConfig struct {
 	VaultConfig VaultConfig
 	Templates   map[string]*template.Template
+	Composites  map[string]*CompositeSecretFile
 }
 
 func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
@@ -126,10 +134,43 @@ func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlTo
 		return nil, err
 	}
 
+	composites, err := current.createCompositeSecrets()
+
 	return &ControlToolConfig{
 		VaultConfig: current,
 		Templates:   templates,
+		Composites:  composites,
 	}, nil
+}
+
+// createCompositeSecrets brings an obscure feature of v1 where multiple secret stanzas could
+// be combined into one JSON secrets file, using the first secret for file mode.
+func (cfg *VaultConfig) createCompositeSecrets() (map[string]*CompositeSecretFile, error) {
+	composites := make(map[string]*CompositeSecretFile)
+
+	for _, secret := range cfg.Secrets {
+		if secret.Output != "" {
+			if file, ok := composites[secret.Output]; ok {
+				file.Secrets = append(file.Secrets, secret)
+
+				if secret.Lifetime == util.LifetimeToken && file.Lifetime == util.LifetimeStatic {
+					secret.Lifetime = util.LifetimeToken
+				}
+			} else {
+				mode, err := util.StringToFileMode(secret.Mode)
+				if err != nil {
+					return nil, err
+				}
+				composites[secret.Output] = &CompositeSecretFile{
+					Filename: secret.Output,
+					Mode:     *mode,
+					Lifetime: secret.Lifetime,
+					Secrets:  []SecretType{secret},
+				}
+			}
+		}
+	}
+	return composites, nil
 }
 
 // Validate the configuration and do any modifications that make the rest of the code easier.

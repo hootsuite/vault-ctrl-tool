@@ -7,8 +7,8 @@ import "github.com/hootsuite/vault-ctrl-tool/v2/util"
 type SecretsCache interface {
 	HasCachedSecrets(lifetime util.SecretLifetime) bool
 	StoreSecrets(lifetime util.SecretLifetime, secrets []SimpleSecret)
-	StaticSecrets() []SimpleSecret
-	TokenSecrets() []SimpleSecret
+	GetStaticSecrets() []SimpleSecret
+	GetTokenSecrets() []SimpleSecret
 }
 
 func (b *Briefcase) HasCachedSecrets(lifetime util.SecretLifetime) bool {
@@ -33,10 +33,10 @@ func (b *Briefcase) StoreSecrets(lifetime util.SecretLifetime, secrets []SimpleS
 	}
 }
 
-func (b *Briefcase) StaticSecrets() []SimpleSecret {
+func (b *Briefcase) GetStaticSecrets() []SimpleSecret {
 	return b.staticScopedCache
 }
 
-func (b *Briefcase) TokenSecrets() []SimpleSecret {
+func (b *Briefcase) GetTokenSecrets() []SimpleSecret {
 	return b.tokenScopedCache
 }
