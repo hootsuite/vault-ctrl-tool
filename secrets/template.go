@@ -43,7 +43,7 @@ func WriteTemplate(tpl config.TemplateType, templates map[string]*template.Templ
 	log.Info().Str("input", tpl.Input).Msg("resolving template")
 
 	util.MustMkdirAllForFile(tpl.Output)
-	util.MakeWritable(tpl.Output)
+
 	file, err := os.OpenFile(tpl.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 	if err != nil {
 		return err

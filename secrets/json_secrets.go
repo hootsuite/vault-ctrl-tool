@@ -18,7 +18,7 @@ func WriteComposite(composite config.CompositeSecretFile, cache briefcase.Secret
 	log.Debug().Interface("compositeCfg", composite).Msg("writing composite secrets file")
 
 	util.MustMkdirAllForFile(composite.Filename)
-	util.MakeWritable(composite.Filename)
+
 	file, err := os.OpenFile(composite.Filename, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, composite.Mode)
 
 	if err != nil {
@@ -94,7 +94,7 @@ func writeField(secret config.SecretType, kvSecrets []briefcase.SimpleSecret, fi
 
 	} else {
 		util.MustMkdirAllForFile(field.Output)
-		util.MakeWritable(field.Output)
+
 		file, err := os.OpenFile(field.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 		if err != nil {
 			return fmt.Errorf("couldn't open file %q: %w", field.Output, err)

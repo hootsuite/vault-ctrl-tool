@@ -25,7 +25,7 @@ func WriteVaultToken(tokenCfg config.VaultTokenType, vaultToken string) error {
 	}
 
 	util.MustMkdirAllForFile(tokenCfg.Output)
-	util.MakeWritable(tokenCfg.Output)
+
 	file, err := os.OpenFile(tokenCfg.Output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, *mode)
 	if err != nil {
 		return fmt.Errorf("failed to create Vault token file %q: %w", tokenCfg.Output, err)

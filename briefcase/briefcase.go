@@ -144,7 +144,6 @@ func (b *Briefcase) SaveAs(filename string) error {
 
 	b.log.Info().Str("filename", filename).Msg("storing briefcase")
 	util.MustMkdirAllForFile(filename)
-	util.MakeWritable(filename)
 	if err := ioutil.WriteFile(filename, bytes, 0600); err != nil {
 		b.log.Error().Err(err).Str("filename", filename).Msg("failed to write briefcase file")
 		return err

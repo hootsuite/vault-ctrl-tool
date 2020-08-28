@@ -37,12 +37,3 @@ func MustMkdirAllForFile(filename string) {
 		log.Fatal().Str("filename", filename).Err(err).Msg("failed to create all needed directories")
 	}
 }
-
-func MakeWritable(filename string) {
-	stat, err := os.Stat(filename)
-	if err == nil && stat != nil {
-		if err := os.Chmod(filename, stat.Mode()|0222); err != nil {
-			log.Warn().Str("filename", filename).Msg("could not chmod file to writable")
-		}
-	}
-}
