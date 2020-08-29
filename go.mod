@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go v1.34.7
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/rs/zerolog v1.19.0
-	github.com/stretchr/testify v1.6.1 // indirect
+	github.com/stretchr/testify v1.6.1
 	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.3.0

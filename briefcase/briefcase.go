@@ -2,6 +2,7 @@ package briefcase
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"time"
 
@@ -74,12 +75,20 @@ func NewBriefcase() *Briefcase {
 // ResetBriefcase is used when a vault token from a briefcase is no longer usable. This means any secrets
 // that weren't "static" will likely soon expire and disappear. By resetting the briefcase, it will cause
 // all the non-static secrets to be recreated.
-func ResetBriefcase(old *Briefcase) *Briefcase {
+func (b *Briefcase) ResetBriefcase() *Briefcase {
 	newBriefcase := NewBriefcase()
-	newBriefcase.StaticScopedSecrets = old.StaticScopedSecrets
-	newBriefcase.StaticScopedComposites = old.StaticScopedComposites
-	newBriefcase.StaticTemplates = old.StaticTemplates
-	newBriefcase.staticScopedCache = old.staticScopedCache
+	// AWS Credentials is done through sts:AssumeRole which currently has no reasonable
+	// revocation mechanism, so credentials remain valid across tokens.
+	newBriefcase.AWSCredentialLeases = b.AWSCredentialLeases
+
+	// SSH certificates expire when their TTL says they expire and there is no CRL mode for them, so they
+	// remain valid across tokens.
+	newBriefcase.SSHCertificates = b.SSHCertificates
+
+	newBriefcase.StaticScopedSecrets = b.StaticScopedSecrets
+	newBriefcase.StaticScopedComposites = b.StaticScopedComposites
+	newBriefcase.StaticTemplates = b.StaticTemplates
+	newBriefcase.staticScopedCache = b.staticScopedCache
 	return newBriefcase
 }
 
@@ -102,6 +111,10 @@ func LoadBriefcase(filename string) (*Briefcase, error) {
 // EnrollVaultToken adds the specified vault token (from Vault) to the briefcase. It captures some expiry information
 // so it knows when it needs to be refreshed.
 func (b *Briefcase) EnrollVaultToken(token *api.Secret) error {
+
+	if token == nil {
+		return errors.New("can only enroll non-nil tokens")
+	}
 
 	tokenID, err := token.TokenID()
 	if err != nil {
@@ -131,6 +144,12 @@ func (b *Briefcase) EnrollVaultToken(token *api.Secret) error {
 	} else {
 		b.log.Info().Time("expiresAt", authToken.ExpiresAt).Time("nextRefresh", authToken.NextRefresh).Msg("vault token refreshed")
 	}
+
+	if authToken.ExpiresAt.Before(time.Now().Add(5 * time.Minute)) {
+		b.log.Warn().Time("expiresAt", authToken.ExpiresAt).Msg("token expires in less than five minutes, setting next refresh to now")
+		authToken.NextRefresh = time.Now()
+	}
+
 	b.AuthTokenLease = authToken
 
 	return nil

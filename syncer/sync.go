@@ -77,7 +77,7 @@ func (s *Syncer) PerformSync(nextSync time.Time, flags util.CliFlags) error {
 	// write it to a file if configured at this point
 	if s.briefcase.AuthTokenLease.Token != vaultToken.TokenID() {
 		s.log.Debug().Msg("briefcase token differs from current token, resetting briefcase")
-		s.briefcase = briefcase.ResetBriefcase(s.briefcase)
+		s.briefcase = s.briefcase.ResetBriefcase()
 		if s.config.VaultConfig.VaultToken.Output != "" {
 			if err := secrets.WriteVaultToken(s.config.VaultConfig.VaultToken, vaultToken.TokenID()); err != nil {
 				s.log.Error().Err(err).Msg("could not write vault token")
