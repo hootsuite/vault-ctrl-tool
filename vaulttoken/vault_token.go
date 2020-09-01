@@ -104,7 +104,7 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 
 		secret, err := vt.tryToken(log, vt.briefcase.AuthTokenLease.Token)
 		if err != nil {
-			log.Info().Str("accessor", vt.briefcase.AuthTokenLease.Accessor).Err(err).Msg("current briefcase token is not usable")
+			log.Warn().Str("accessor", vt.briefcase.AuthTokenLease.Accessor).Err(err).Msg("current briefcase token is not usable")
 		} else {
 			accessor, _ := secret.TokenAccessor()
 			log.Debug().Str("accessor", accessor).Msg("current briefcase token is usable")
