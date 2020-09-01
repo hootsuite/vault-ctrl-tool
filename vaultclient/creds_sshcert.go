@@ -18,10 +18,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSHPrivateKey is the name of the output file with the the SSH private key (think: ssh -i id_rsa ....)
+// SSHPrivateKey is the name of the output file with the the SSH private key (think: ssh -i id_rsa ....).
 const SSHPrivateKey = "id_rsa"
 
-// SSHPublicKey is the corresponding public key, used for signing
+// SSHPublicKey is the corresponding public key, used for signing.
 const SSHPublicKey = "id_rsa.pub"
 
 func (vc *wrappedVaultClient) CreateSSHCertificate(ssh config.SSHCertificateType) error {
@@ -76,10 +76,9 @@ func (vc *wrappedVaultClient) generateKeyPair(privateKeyFilename, publicKeyFilen
 	err = ioutil.WriteFile(publicKeyFilename, ssh.MarshalAuthorizedKey(pub), 0600)
 	if err != nil {
 		return fmt.Errorf("could not write public SSH key %q: %w", publicKeyFilename, err)
-
 	}
-	return nil
 
+	return nil
 }
 
 func (vc *wrappedVaultClient) signKey(log zerolog.Logger, outputPath string, vaultMount string, vaultRole string) error {

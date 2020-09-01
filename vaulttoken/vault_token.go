@@ -95,7 +95,7 @@ func (vt *vaultTokenManager) CheckAndRefresh() error {
 
 // determineVaultToken looks through the various ways a vault token may already exist (briefcase, flag, env variable),
 // and checks with the vault server if the token is still good, optionally refreshing it. If there isn't a vault
-// token around, it returns ErrNoValidVaultTokenAvailable
+// token around, it returns ErrNoValidVaultTokenAvailable.
 func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 	if vt.briefcase != nil && vt.briefcase.AuthTokenLease.Token != "" {
 		log := vt.log.With().Str("source", "briefcase").Logger()
@@ -104,8 +104,10 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 
 		secret, err := vt.tryToken(log, vt.briefcase.AuthTokenLease.Token)
 		if err != nil {
-			log.Info().Err(err).Msg("current briefcase token is not usable")
+			log.Info().Str("accessor", vt.briefcase.AuthTokenLease.Accessor).Err(err).Msg("current briefcase token is not usable")
 		} else {
+			accessor, _ := secret.TokenAccessor()
+			log.Debug().Str("accessor", accessor).Msg("current briefcase token is usable")
 			return secret, nil
 		}
 	}
@@ -118,6 +120,8 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 		if err != nil {
 			log.Info().Err(err).Msg("current cli token is not usable")
 		} else {
+			accessor, _ := secret.TokenAccessor()
+			log.Debug().Str("accessor", accessor).Msg("current cli token is usable")
 			return secret, nil
 		}
 	}
@@ -131,6 +135,8 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 		if err != nil {
 			log.Info().Err(err).Msg("current VAULT_TOKEN is not usable")
 		} else {
+			accessor, _ := secret.TokenAccessor()
+			log.Debug().Str("accessor", accessor).Msg("current VAULT_TOKEN is usable")
 			return secret, nil
 		}
 	}
@@ -145,6 +151,10 @@ func (vt *vaultTokenManager) tryToken(log zerolog.Logger, token string) (*api.Se
 		return nil, err
 	}
 
+	if secret == nil {
+		return nil, fmt.Errorf("server did not return an error, nor a secret")
+	}
+
 	ttl, err := secret.TokenTTL()
 	if err != nil {
 		return nil, err
@@ -152,7 +162,7 @@ func (vt *vaultTokenManager) tryToken(log zerolog.Logger, token string) (*api.Se
 
 	log.Debug().Str("ttl", ttl.String()).Msg("checking token ttl")
 
-	if ttl.Seconds() > 0 && ttl.Seconds() < 60 {
+	if ttl.Seconds() > 2 && ttl.Seconds() < 60 {
 		renewedSecret, err := vt.vaultClient.Delegate().Auth().Token().RenewTokenAsSelf(token, 3600)
 		if err != nil {
 			log.Warn().Err(err).Str("ttl", ttl.String()).Msg("failed to renew token")

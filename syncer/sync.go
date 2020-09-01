@@ -1,6 +1,7 @@
 package syncer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -63,7 +64,7 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 	return log, cfg, vaultClient, nil
 }
 
-func (s *Syncer) PerformSync(nextSync time.Time, flags util.CliFlags) error {
+func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util.CliFlags) error {
 
 	vaultToken, err := s.obtainVaultToken(flags)
 	if err != nil {
@@ -84,12 +85,12 @@ func (s *Syncer) PerformSync(nextSync time.Time, flags util.CliFlags) error {
 				return err
 			}
 		}
-		if err := s.briefcase.EnrollVaultToken(vaultToken.Secret()); err != nil {
+		if err := s.briefcase.EnrollVaultToken(ctx, vaultToken.Secret()); err != nil {
 			s.log.Error().Err(err).Msg("could not enroll vault token into briefcase")
 		}
 	}
 
-	if s.briefcase.ShouldRefreshVaultToken() {
+	if s.briefcase.ShouldRefreshVaultToken(ctx) {
 		s.log.Debug().Msg("refreshing vault token against server")
 		secret, err := s.vaultClient.RefreshVaultToken()
 		if err != nil {
@@ -97,7 +98,7 @@ func (s *Syncer) PerformSync(nextSync time.Time, flags util.CliFlags) error {
 			return err
 		}
 
-		if err := s.briefcase.EnrollVaultToken(secret); err != nil {
+		if err := s.briefcase.EnrollVaultToken(ctx, secret); err != nil {
 			return err
 		}
 	}
@@ -126,7 +127,7 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 		log := s.log.With().Interface("awsCfg", aws).Logger()
 		log.Debug().Msg("checking AWS STS credential")
 
-		if s.briefcase.ShouldRefreshAWSCredential(aws, nextSync) {
+		if s.briefcase.AWSCredentialExpiresBefore(aws, nextSync) {
 			updates++
 			log.Debug().Msg("refreshing AWS STS credential")
 			creds, secret, err := s.vaultClient.FetchAWSSTSCredential(aws)
@@ -141,7 +142,7 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 				return err
 			}
 
-			s.briefcase.EnrollAWSCredential(secret, aws)
+			s.briefcase.EnrollAWSCredential(context.TODO(), secret, aws)
 		}
 	}
 
@@ -303,7 +304,6 @@ func (s *Syncer) cacheSecrets(lifetime util.SecretLifetime) error {
 
 	for _, secret := range s.config.VaultConfig.Secrets {
 		if secret.Lifetime == lifetime {
-
 			key := secret.Key
 
 			s.log.Info().Str("path", secret.Path).Msg("fetching secret")

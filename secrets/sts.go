@@ -88,5 +88,4 @@ aws_session_token=%s
 	}
 
 	return nil
-
 }

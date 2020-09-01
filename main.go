@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -41,15 +42,15 @@ func main() {
 	case util.ModeShowVersion:
 		fmt.Printf("Version: %s\n", buildVersion)
 	case util.ModeInit:
-		if err := PerformInit(*flags); err != nil {
+		if err := PerformInit(context.Background(), *flags); err != nil {
 			panic(err)
 		}
 	case util.ModeSidecar:
-		if err := PerformSidecar(*flags); err != nil {
+		if err := PerformSidecar(context.Background(), *flags); err != nil {
 			panic(err)
 		}
 	case util.ModeOneShotSidecar:
-		if err := PerformOneShotSidecar(*flags); err != nil {
+		if err := PerformOneShotSidecar(context.Background(), *flags); err != nil {
 			panic(err)
 		}
 	case util.ModeCleanup:

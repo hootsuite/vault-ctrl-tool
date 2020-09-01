@@ -1,13 +1,15 @@
 package briefcase
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/vault/api"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/hashicorp/vault/api"
+	"github.com/stretchr/testify/assert"
 )
 
 const exampleToken = `{
@@ -32,33 +34,10 @@ const exampleToken = `{
     "orphan": true,
     "path": "auth/ldap/login/james.atwill",
     "policies": [
-      "aws-adespresso-dev-readonly",
-      "aws-adespresso-main-developer",
-      "aws-adespresso-main-readonly",
-      "aws-dev-readonly",
-      "aws-kubernetes-build-dev",
-      "aws-kubernetes-build-ops",
-      "aws-kubernetes-development-dev",
-      "aws-kubernetes-development-ops",
-      "aws-kubernetes-production-dev",
-      "aws-kubernetes-production-ops",
-      "aws-kubernetes-staging-dev",
-      "aws-kubernetes-staging-ops",
-      "aws-legacy-engineering",
-      "aws-legacy-ops",
-      "aws-main-readonly",
-      "aws-main-sagemaker",
-      "aws-main-terraform",
-      "aws-sandbox-admin",
-      "aws-sandbox-dev",
-      "aws-ubervu-admin",
-      "aws-ubervu-readonly",
-      "can-hard-delete-secrets",
-      "can-read-policies",
-      "can-readwrite-secrets",
-      "can-update-secrets",
-      "default",
-      "vault-developers"
+		"a",
+		"b",
+		"c",
+		"default"
     ],
     "renewable": true,
     "ttl": 32382,
@@ -114,13 +93,13 @@ func TestSaveAndLoadEnrolledToken(t *testing.T) {
 
 	token := myToken(t)
 
-	assert.NoError(t, bc.EnrollVaultToken(&token), "must be able to enroll example token in briefcase")
+	assert.NoError(t, bc.EnrollVaultToken(context.Background(), &token), "must be able to enroll example token in briefcase")
 	assert.NoError(t, bc.SaveAs(filename), "must be able to save briefcase")
 
 	loadedBriefcase, err := LoadBriefcase(filename)
 	assert.NoError(t, err, "must be able to reload briefcase")
 
-	assert.False(t, loadedBriefcase.ShouldRefreshVaultToken(), "must not need to refresh a token with a TTL")
+	assert.False(t, loadedBriefcase.ShouldRefreshVaultToken(context.TODO()), "must not need to refresh a token with a TTL")
 	assert.Equal(t, "s.eD8onDKEpvQqNCrSZDwxPLld", loadedBriefcase.AuthTokenLease.Token, "loaded token must equal saved token")
 	assert.Equal(t, "8FvDM61Vc23jht83if5bFWlC", loadedBriefcase.AuthTokenLease.Accessor, "loaded accessor must equal saved accessor")
 }
@@ -132,15 +111,15 @@ func TestExpiringTokenNeedsRefresh(t *testing.T) {
 	token.Data["ttl"] = 299
 	fmt.Printf("%+v\n", token)
 
-	assert.NoError(t, bc.EnrollVaultToken(&token), "must be able to enroll example token in briefcase")
-	assert.True(t, bc.ShouldRefreshVaultToken(), "token expiring in less than 5 minutes must require a refresh")
+	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), &token), "must be able to enroll example token in briefcase")
+	assert.True(t, bc.ShouldRefreshVaultToken(context.TODO()), "token expiring in less than 5 minutes must require a refresh")
 }
 
 func TestNilTokenEnrollment(t *testing.T) {
 	bc := NewBriefcase()
 
 	assert.NotPanics(t, func() {
-		assert.Error(t, bc.EnrollVaultToken(nil), "trying to enroll a nil token must return an error")
+		assert.Error(t, bc.EnrollVaultToken(context.TODO(), nil), "trying to enroll a nil token must return an error")
 	}, "trying to enroll a nil token must not panic()")
 }
 

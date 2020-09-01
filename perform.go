@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
@@ -17,7 +20,7 @@ import (
 
 const ShutdownFileCheckFrequency = 18 * time.Second
 
-func PerformOneShotSidecar(flags util.CliFlags) error {
+func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 
 	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
 	if err != nil {
@@ -30,10 +33,10 @@ func PerformOneShotSidecar(flags util.CliFlags) error {
 		return err
 	}
 
-	return sync.PerformSync(time.Now().Add(flags.RenewInterval).Add(time.Minute), flags)
+	return sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval/2), flags)
 }
 
-func PerformInit(flags util.CliFlags) error {
+func PerformInit(ctx context.Context, flags util.CliFlags) error {
 	if stat, err := os.Stat(flags.BriefcaseFilename); err == nil && stat != nil {
 		zlog.Warn().Str("filename", flags.BriefcaseFilename).Msg("running in init mode, but briefcase file already exists")
 	}
@@ -44,10 +47,10 @@ func PerformInit(flags util.CliFlags) error {
 		return err
 	}
 
-	return sync.PerformSync(time.Now().Add(24*time.Hour), flags)
+	return sync.PerformSync(ctx, clock.Now(ctx).Add(24*time.Hour), flags)
 }
 
-func PerformSidecar(flags util.CliFlags) error {
+func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 
 	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
 	if err != nil {
@@ -67,7 +70,7 @@ func PerformSidecar(flags util.CliFlags) error {
 	go func() {
 		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Msg("starting")
 
-		if err := sync.PerformSync(time.Now().Add(flags.RenewInterval/2), flags); err != nil {
+		if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval/2), flags); err != nil {
 			zlog.Error().Err(err).Msg("initial sync failed")
 		}
 
@@ -81,7 +84,7 @@ func PerformSidecar(flags util.CliFlags) error {
 			select {
 			case <-renewTicker.C:
 				zlog.Info().Msg("heartbeat")
-				if err := sync.PerformSync(time.Now().Add(flags.RenewInterval/2), flags); err != nil {
+				if err := sync.PerformSync(context.Background(), clock.Now(ctx).Add(flags.RenewInterval/2), flags); err != nil {
 					zlog.Error().Err(err).Msg("sync failed")
 				}
 			case <-jobCompletionTicker.C:

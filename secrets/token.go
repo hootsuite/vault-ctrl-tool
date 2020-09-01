@@ -40,5 +40,4 @@ func WriteVaultToken(tokenCfg config.VaultTokenType, vaultToken string) error {
 	}
 
 	return nil
-
 }

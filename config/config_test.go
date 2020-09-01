@@ -7,7 +7,6 @@ import (
 )
 
 func TestEmptyFile(t *testing.T) {
-
 	filename := mkConfig(t, "")
 	defer os.Remove(filename)
 
@@ -23,7 +22,6 @@ func TestEmptyFile(t *testing.T) {
 }
 
 func TestEmptyV2(t *testing.T) {
-
 	filename := mkConfig(t, `---
 version: 2`)
 	defer os.Remove(filename)
@@ -41,7 +39,6 @@ version: 2`)
 }
 
 func mkConfig(t *testing.T, body string) string {
-
 	f, err := ioutil.TempFile("", "config_test_*")
 
 	if err != nil {

@@ -135,6 +135,10 @@ func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlTo
 	}
 
 	composites, err := current.createCompositeSecrets()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to create mapping of composite secret files")
+		return nil, err
+	}
 
 	return &ControlToolConfig{
 		VaultConfig: current,
@@ -191,7 +195,6 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 	var tidyTpls []TemplateType
 
 	for _, tpl := range cfg.Templates {
-
 		if tpl.Lifetime == "" && cfg.ConfigVersion < 3 {
 			tpl.Lifetime = util.LifetimeStatic
 		}

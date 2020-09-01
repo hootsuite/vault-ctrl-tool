@@ -1,10 +1,13 @@
 package briefcase
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
@@ -110,7 +113,7 @@ func LoadBriefcase(filename string) (*Briefcase, error) {
 
 // EnrollVaultToken adds the specified vault token (from Vault) to the briefcase. It captures some expiry information
 // so it knows when it needs to be refreshed.
-func (b *Briefcase) EnrollVaultToken(token *api.Secret) error {
+func (b *Briefcase) EnrollVaultToken(ctx context.Context, token *api.Secret) error {
 
 	if token == nil {
 		return errors.New("can only enroll non-nil tokens")
@@ -131,11 +134,13 @@ func (b *Briefcase) EnrollVaultToken(token *api.Secret) error {
 		return err
 	}
 
+	now := clock.Now(ctx)
+
 	authToken := LeasedAuthToken{
 		Token:       tokenID,
 		Accessor:    accessor,
-		ExpiresAt:   time.Now().Add(ttl),
-		NextRefresh: time.Now().Add(ttl / 3),
+		ExpiresAt:   now.Add(ttl),
+		NextRefresh: now.Add(ttl / 3),
 	}
 
 	if b.AuthTokenLease.Token != tokenID {
@@ -145,9 +150,9 @@ func (b *Briefcase) EnrollVaultToken(token *api.Secret) error {
 		b.log.Info().Time("expiresAt", authToken.ExpiresAt).Time("nextRefresh", authToken.NextRefresh).Msg("vault token refreshed")
 	}
 
-	if authToken.ExpiresAt.Before(time.Now().Add(5 * time.Minute)) {
+	if authToken.ExpiresAt.Before(now.Add(5 * time.Minute)) {
 		b.log.Warn().Time("expiresAt", authToken.ExpiresAt).Msg("token expires in less than five minutes, setting next refresh to now")
-		authToken.NextRefresh = time.Now()
+		authToken.NextRefresh = now
 	}
 
 	b.AuthTokenLease = authToken
@@ -173,6 +178,6 @@ func (b *Briefcase) SaveAs(filename string) error {
 
 // ShouldRefreshVaultToken will return true if it's time to do periodic refresh of the Vault token being
 // used by the tool. This time is established when the token is enrolled into the briefcase.
-func (b *Briefcase) ShouldRefreshVaultToken() bool {
-	return time.Now().After(b.AuthTokenLease.NextRefresh)
+func (b *Briefcase) ShouldRefreshVaultToken(ctx context.Context) bool {
+	return clock.Now(ctx).After(b.AuthTokenLease.NextRefresh)
 }

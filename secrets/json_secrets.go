@@ -146,7 +146,6 @@ func collectSecrets(log zerolog.Logger, composite config.CompositeSecretFile, kv
 		} else {
 			for _, s := range kvSecrets {
 				if s.Key == secret.Key {
-
 					if _, dupe := data[s.Field]; dupe {
 						log.Error().Str("field", s.Field).Msg("this field causes there to be a duplicate entry")
 						return nil, fmt.Errorf("the secret field %q causes there to be a duplicate", s.Field)
