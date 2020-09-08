@@ -33,7 +33,7 @@ func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 		return err
 	}
 
-	return sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval/2), flags)
+	return sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags)
 }
 
 func PerformInit(ctx context.Context, flags util.CliFlags) error {
@@ -52,17 +52,6 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 
 func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 
-	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
-	if err != nil {
-		zlog.Warn().Str("briefcase", flags.BriefcaseFilename).Err(err).Msg("could not load briefcase - starting an empty one")
-		bc = briefcase.NewBriefcase()
-	}
-
-	sync, err := syncer.SetupSyncer(flags, bc)
-	if err != nil {
-		return err
-	}
-
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, syscall.SIGTERM)
@@ -70,8 +59,19 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 	go func() {
 		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Msg("starting")
 
-		if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval/2), flags); err != nil {
-			zlog.Error().Err(err).Msg("initial sync failed")
+		{
+			sync, err := makeSyncer(flags)
+			if err != nil {
+				zlog.Error().Err(err).Msg("could not create syncer")
+				c <- os.Interrupt
+				return
+			}
+
+			if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
+				zlog.Error().Err(err).Msg("initial sync failed")
+				c <- os.Interrupt
+				return
+			}
 		}
 
 		renewTicker := time.NewTicker(flags.RenewInterval)
@@ -84,8 +84,17 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 			select {
 			case <-renewTicker.C:
 				zlog.Info().Msg("heartbeat")
-				if err := sync.PerformSync(context.Background(), clock.Now(ctx).Add(flags.RenewInterval/2), flags); err != nil {
-					zlog.Error().Err(err).Msg("sync failed")
+				{
+					sync, err := makeSyncer(flags)
+					if err != nil {
+						zlog.Error().Err(err).Msg("could not create syncer")
+						c <- os.Interrupt
+						return
+					}
+
+					if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
+						zlog.Error().Err(err).Msg("sync failed")
+					}
 				}
 			case <-jobCompletionTicker.C:
 				if flags.ShutdownTriggerFile != "" {
@@ -143,4 +152,19 @@ func PerformCleanup(flags util.CliFlags) error {
 	log.Info().Msg("cleanup finished")
 
 	return nil
+}
+
+func makeSyncer(flags util.CliFlags) (*syncer.Syncer, error) {
+	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
+	if err != nil {
+		zlog.Warn().Str("briefcase", flags.BriefcaseFilename).Err(err).Msg("could not load briefcase - starting an empty one")
+		bc = briefcase.NewBriefcase()
+	}
+
+	sync, err := syncer.SetupSyncer(flags, bc)
+	if err != nil {
+		return nil, err
+	}
+
+	return sync, nil
 }
