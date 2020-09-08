@@ -37,6 +37,9 @@ func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 }
 
 func PerformInit(ctx context.Context, flags util.CliFlags) error {
+
+	zlog.Info().Str("buildVersion", buildVersion).Msg("starting")
+
 	if stat, err := os.Stat(flags.BriefcaseFilename); err == nil && stat != nil {
 		zlog.Warn().Str("filename", flags.BriefcaseFilename).Msg("running in init mode, but briefcase file already exists")
 	}
@@ -57,7 +60,7 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 	signal.Notify(c, syscall.SIGTERM)
 
 	go func() {
-		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Msg("starting")
+		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Str("buildVersion", buildVersion).Msg("starting")
 
 		{
 			sync, err := makeSyncer(flags)
