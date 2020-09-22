@@ -128,7 +128,7 @@ func PerformCleanup(flags util.CliFlags) error {
 	} else {
 
 		if flags.RevokeOnCleanup && bc.AuthTokenLease.Token != "" {
-			vaultClient, err := vaultclient.NewVaultClient()
+			vaultClient, err := vaultclient.NewVaultClient(flags.ServiceSecretPrefix)
 			if err != nil {
 				log.Error().Err(err).Msg("could not create new vault client to revoke token")
 			} else {

@@ -5,12 +5,11 @@
 package mock_vaultclient
 
 import (
-	reflect "reflect"
-
 	gomock "github.com/golang/mock/gomock"
 	api "github.com/hashicorp/vault/api"
 	config "github.com/hootsuite/vault-ctrl-tool/v2/config"
 	vaultclient "github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
+	reflect "reflect"
 )
 
 // MockVaultClient is a mock of VaultClient interface

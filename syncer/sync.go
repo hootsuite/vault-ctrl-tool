@@ -55,7 +55,7 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 		return log, nil, nil, err
 	}
 
-	vaultClient, err := vaultclient.NewVaultClient()
+	vaultClient, err := vaultclient.NewVaultClient(flags.ServiceSecretPrefix)
 	if err != nil {
 		log.Error().Err(err).Msg("could not create vault client")
 		return log, nil, nil, err

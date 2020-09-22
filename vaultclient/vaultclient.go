@@ -20,12 +20,12 @@ type VaultClient interface {
 }
 
 type wrappedVaultClient struct {
-	delegate *api.Client
-
-	log zerolog.Logger
+	delegate      *api.Client
+	secretsPrefix string
+	log           zerolog.Logger
 }
 
-func NewVaultClient() (VaultClient, error) {
+func NewVaultClient(secretsPrefix string) (VaultClient, error) {
 
 	client, err := api.NewClient(api.DefaultConfig())
 	if err != nil {
@@ -35,8 +35,9 @@ func NewVaultClient() (VaultClient, error) {
 	log := zlog.With().Str("vaultAddr", client.Address()).Logger()
 
 	return &wrappedVaultClient{
-		delegate: client,
-		log:      log,
+		secretsPrefix: secretsPrefix,
+		delegate:      client,
+		log:           log,
 	}, nil
 }
 
@@ -65,6 +66,11 @@ func (vc *wrappedVaultClient) RefreshVaultToken() (*api.Secret, error) {
 }
 
 func (vc *wrappedVaultClient) ServiceSecretPrefix(configVersion int) string {
+
+	if vc.secretsPrefix != "" {
+		return vc.secretsPrefix
+	}
+
 	if configVersion < 2 {
 		return SecretsServicePathV1
 	} else {
