@@ -1,0 +1,6 @@
+
+23-Sep-2020
+ * Started CHANGELOG
+ * Added provisional file locking around sync runs to prevent concurrent modification
+ * --init in Kubernetes will now function as a --sidecar --oneshot instead of re-authenticating (this is to
+   work around Kubernetes issues where init containers will re-run)

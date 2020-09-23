@@ -29,7 +29,7 @@ type CliFlags struct {
 	ServiceSecretPrefix string        // override prefix for relative KV secrets
 	KubernetesLoginPath string        // path to use in Vault for Kubernetes authentication
 	ServiceAccountToken string        // path to the ServiceAccount token file for Kubernetes authentication
-	KubernetesAuthRole  string        // role to use with Kubernetes authentication
+	KubernetesAuthRole  string        // enables Kubernetes auth, and sets role to use with Kubernetes authentication
 	DebugLogLevel       bool          // enable debug logging
 }
 

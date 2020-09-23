@@ -259,12 +259,13 @@ func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, e
 	if err := token.CheckAndRefresh(); err != nil {
 		if errors.Is(err, vaulttoken.ErrNoValidVaultTokenAvailable) {
 			log.Debug().Err(err).Msg("no vault token already available, performing authentication")
+
 			authenticator, err := vaultclient.NewAuthenticator(s.vaultClient, flags)
 			if err != nil {
 				log.Error().Err(err).Msg("unable to create authenticator")
 				return nil, err
 			}
-			log.Debug().Interface("authenticator", authenticator).Msg("authenticator created")
+			log.Debug().Str("authenticator", fmt.Sprintf("%+v", authenticator)).Msg("authenticator created")
 			secret, err := authenticator.Authenticate()
 			if err != nil {
 				log.Error().Err(err).Msg("authentication failed")
@@ -290,7 +291,7 @@ func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, e
 		}
 	}
 
-	log.Info().Str("accessorToken", token.Accessor()).Msg("using valid token")
+	log.Info().Str("accessor", token.Accessor()).Msg("using valid token")
 
 	return token, nil
 }

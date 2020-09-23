@@ -22,6 +22,14 @@ const ShutdownFileCheckFrequency = 18 * time.Second
 
 func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 
+	lockHandle, err := createLock(flags.BriefcaseFilename)
+	if err != nil {
+		zlog.Error().Err(err).Msg("could not create exclusive flock")
+		return err
+	}
+	defer lockHandle.Unlock(false)
+
+	zlog.Debug().Str("briefcase", flags.BriefcaseFilename).Str("buildVersion", buildVersion).Msg("starting oneshot")
 	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
 	if err != nil {
 		zlog.Warn().Str("briefcase", flags.BriefcaseFilename).Err(err).Msg("could not load briefcase - starting an empty one")
@@ -40,8 +48,19 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 
 	zlog.Info().Str("buildVersion", buildVersion).Msg("starting")
 
+	lockHandle, err := createLock(flags.BriefcaseFilename)
+	if err != nil {
+		zlog.Error().Err(err).Msg("could not create exclusive flock")
+		return err
+	}
+	defer lockHandle.Unlock(false)
+
 	if stat, err := os.Stat(flags.BriefcaseFilename); err == nil && stat != nil {
 		zlog.Warn().Str("filename", flags.BriefcaseFilename).Msg("running in init mode, but briefcase file already exists")
+		if flags.AuthMechanism() == util.KubernetesAuth {
+			zlog.Warn().Msg("running in kuberenetes - performing oneshot sidecar instead of init")
+			return PerformOneShotSidecar(ctx, flags)
+		}
 	}
 
 	sync, err := syncer.SetupSyncer(flags, briefcase.NewBriefcase())
@@ -53,6 +72,29 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 	return sync.PerformSync(ctx, clock.Now(ctx).Add(24*time.Hour), flags)
 }
 
+func sidecarSync(ctx context.Context, flags util.CliFlags, c chan os.Signal) {
+	lockHandle, err := createLock(flags.BriefcaseFilename)
+	if err != nil {
+		zlog.Error().Err(err).Msg("could not create exclusive flock")
+		c <- os.Interrupt
+		return
+	}
+	defer lockHandle.Unlock(true)
+
+	sync, err := makeSyncer(flags)
+	if err != nil {
+		zlog.Error().Err(err).Msg("could not create syncer")
+		c <- os.Interrupt
+		return
+	}
+
+	if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
+		zlog.Error().Err(err).Msg("sync failed")
+		c <- os.Interrupt
+		return
+	}
+}
+
 func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 
 	c := make(chan os.Signal, 1)
@@ -62,20 +104,7 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 	go func() {
 		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Str("buildVersion", buildVersion).Msg("starting")
 
-		{
-			sync, err := makeSyncer(flags)
-			if err != nil {
-				zlog.Error().Err(err).Msg("could not create syncer")
-				c <- os.Interrupt
-				return
-			}
-
-			if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
-				zlog.Error().Err(err).Msg("initial sync failed")
-				c <- os.Interrupt
-				return
-			}
-		}
+		sidecarSync(ctx, flags, c)
 
 		renewTicker := time.NewTicker(flags.RenewInterval)
 		defer renewTicker.Stop()
@@ -87,18 +116,7 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 			select {
 			case <-renewTicker.C:
 				zlog.Info().Msg("heartbeat")
-				{
-					sync, err := makeSyncer(flags)
-					if err != nil {
-						zlog.Error().Err(err).Msg("could not create syncer")
-						c <- os.Interrupt
-						return
-					}
-
-					if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
-						zlog.Error().Err(err).Msg("sync failed")
-					}
-				}
+				sidecarSync(ctx, flags, c)
 			case <-jobCompletionTicker.C:
 				if flags.ShutdownTriggerFile != "" {
 					zlog.Debug().Str("triggerFile", flags.ShutdownTriggerFile).Msg("performing completion check against file")
@@ -170,4 +188,19 @@ func makeSyncer(flags util.CliFlags) (*syncer.Syncer, error) {
 	}
 
 	return sync, nil
+}
+
+func createLock(briefcaseFilename string) (*util.LockHandle, error) {
+
+	lockFilename := briefcaseFilename + ".lck"
+	zlog.Debug().Str("lockfile", lockFilename).Msg("going to obtain exclusive flock")
+
+	lockHandle, err := util.LockFile(lockFilename)
+	if err != nil {
+		return nil, err
+	}
+	zlog.Debug().Str("lockfile", lockFilename).Msg("obtained exclusive flock")
+
+	return lockHandle, nil
+
 }
