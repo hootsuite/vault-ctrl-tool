@@ -57,6 +57,7 @@ func (lh *LockHandle) Unlock(panicOnUnlockFailure bool) error {
 		return fmt.Errorf("multiple calls to unlock file %q", lh.filename)
 	}
 
+	zlog.Debug().Str("lockfile", lh.filename).Msg("going to unlock lockfile")
 	if err := syscall.Flock(int(lh.osFile.Fd()), syscall.LOCK_UN); err != nil {
 		wrapped := fmt.Errorf("could not release exclusive lock on %q: %w", lh.filename, err)
 		if panicOnUnlockFailure {
@@ -65,8 +66,8 @@ func (lh *LockHandle) Unlock(panicOnUnlockFailure bool) error {
 			return wrapped
 		}
 	}
-
 	lh.locked = false
+	zlog.Debug().Str("lockfile", lh.filename).Msg("lockfile unlocked")
 
 	if err := lh.osFile.Close(); err != nil {
 		return fmt.Errorf("failed to close file %q after unlocking successfully: %w", lh.filename, err)

@@ -22,7 +22,7 @@ const ShutdownFileCheckFrequency = 18 * time.Second
 
 func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 
-	lockHandle, err := createLock(flags.BriefcaseFilename)
+	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
 		zlog.Error().Err(err).Msg("could not create exclusive flock")
 		return err
@@ -48,7 +48,7 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 
 	zlog.Info().Str("buildVersion", buildVersion).Msg("starting")
 
-	lockHandle, err := createLock(flags.BriefcaseFilename)
+	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
 		zlog.Error().Err(err).Msg("could not create exclusive flock")
 		return err
@@ -74,7 +74,7 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 }
 
 func sidecarSync(ctx context.Context, flags util.CliFlags, c chan os.Signal) {
-	lockHandle, err := createLock(flags.BriefcaseFilename)
+	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
 		zlog.Error().Err(err).Msg("could not create exclusive flock")
 		c <- os.Interrupt
@@ -189,19 +189,4 @@ func makeSyncer(flags util.CliFlags) (*syncer.Syncer, error) {
 	}
 
 	return sync, nil
-}
-
-func createLock(briefcaseFilename string) (*util.LockHandle, error) {
-
-	lockFilename := briefcaseFilename + ".lck"
-	zlog.Debug().Str("lockfile", lockFilename).Msg("going to obtain exclusive flock")
-
-	lockHandle, err := util.LockFile(lockFilename)
-	if err != nil {
-		return nil, err
-	}
-	zlog.Debug().Str("lockfile", lockFilename).Msg("obtained exclusive flock")
-
-	return lockHandle, nil
-
 }
