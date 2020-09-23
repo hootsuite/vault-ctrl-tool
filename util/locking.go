@@ -17,9 +17,7 @@ type LockHandle struct {
 
 // LockFile sets an exclusive provisional file lock on a file (creating it if needed).  It's basically a wrapper
 // around flock(, LOCK_EX), but hides the file descriptor from the caller since file descriptors aren't very Go-like.
-// Returns a non-nil lock handle which can be passed to lh.Unlock(). Remember that provisional file locks
-// are per-process.
-// Note that "Unlock" will attempt to delete the file.
+// Returns a non-nil lock handle which can be passed to lh.Unlock(). Note that "Unlock" will attempt to delete the file.
 func LockFile(filename string) (*LockHandle, error) {
 
 	absFilename, err := filepath.Abs(filename)

@@ -59,6 +59,7 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 		zlog.Warn().Str("filename", flags.BriefcaseFilename).Msg("running in init mode, but briefcase file already exists")
 		if flags.AuthMechanism() == util.KubernetesAuth {
 			zlog.Warn().Msg("running in kuberenetes - performing oneshot sidecar instead of init")
+			_ = lockHandle.Unlock(true)
 			return PerformOneShotSidecar(ctx, flags)
 		}
 	}
