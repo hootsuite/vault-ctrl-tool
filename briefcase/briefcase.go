@@ -145,7 +145,7 @@ func (b *Briefcase) EnrollVaultToken(ctx context.Context, token *api.Secret) err
 
 	if b.AuthTokenLease.Token != tokenID {
 		b.log = zlog.With().Str("accessor", accessor).Logger()
-		b.log.Info().Str("ttl", ttl.String()).Msg("enrolling vault token with specified ttl into briefcase")
+		b.log.Info().Str("ttl", ttl.String()).Str("nextRefresh", authToken.NextRefresh.String()).Msg("enrolling vault token with specified ttl into briefcase")
 	} else {
 		b.log.Info().Time("expiresAt", authToken.ExpiresAt).Time("nextRefresh", authToken.NextRefresh).Msg("vault token refreshed")
 	}
