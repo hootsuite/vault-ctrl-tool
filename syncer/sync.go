@@ -85,7 +85,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 				return err
 			}
 		}
-		if err := s.briefcase.EnrollVaultToken(ctx, vaultToken.Secret()); err != nil {
+		if err := s.briefcase.EnrollVaultToken(ctx, vaultToken.Wrapped()); err != nil {
 			s.log.Error().Err(err).Msg("could not enroll vault token into briefcase")
 		}
 	}
@@ -98,7 +98,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 			return err
 		}
 
-		if err := s.briefcase.EnrollVaultToken(ctx, secret); err != nil {
+		if err := s.briefcase.EnrollVaultToken(ctx, util.NewWrappedToken(secret, s.briefcase.AuthTokenLease.Renewable)); err != nil {
 			return err
 		}
 	}
@@ -142,7 +142,7 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 				return err
 			}
 
-			s.briefcase.EnrollAWSCredential(context.TODO(), secret, aws)
+			s.briefcase.EnrollAWSCredential(context.TODO(), secret.Secret, aws)
 		}
 	}
 
@@ -254,7 +254,7 @@ func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, e
 
 	log.Info().Msg("obtaining vault token")
 
-	token := vaulttoken.NewVaultToken(s.briefcase, s.vaultClient, flags.VaultTokenArg)
+	token := vaulttoken.NewVaultToken(s.briefcase, s.vaultClient, flags.VaultTokenArg, flags.CliVaultTokenRenewable)
 
 	if err := token.CheckAndRefresh(); err != nil {
 		if errors.Is(err, vaulttoken.ErrNoValidVaultTokenAvailable) {

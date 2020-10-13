@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"os"
 	"path"
 	"testing"
@@ -93,7 +94,7 @@ func TestSaveAndLoadEnrolledToken(t *testing.T) {
 
 	token := myToken(t)
 
-	assert.NoError(t, bc.EnrollVaultToken(context.Background(), &token), "must be able to enroll example token in briefcase")
+	assert.NoError(t, bc.EnrollVaultToken(context.Background(), util.NewWrappedToken(&token, true)), "must be able to enroll example token in briefcase")
 	assert.NoError(t, bc.SaveAs(filename), "must be able to save briefcase")
 
 	loadedBriefcase, err := LoadBriefcase(filename)
@@ -111,7 +112,7 @@ func TestExpiringTokenNeedsRefresh(t *testing.T) {
 	token.Data["ttl"] = 299
 	fmt.Printf("%+v\n", token)
 
-	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), &token), "must be able to enroll example token in briefcase")
+	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&token, true)), "must be able to enroll example token in briefcase")
 	assert.True(t, bc.ShouldRefreshVaultToken(context.TODO()), "token expiring in less than 5 minutes must require a refresh")
 }
 

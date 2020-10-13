@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"io/ioutil"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -16,7 +17,7 @@ import (
 	"github.com/hashicorp/vault/api"
 )
 
-func (auth *ec2iamAuthenticator) Authenticate() (*api.Secret, error) {
+func (auth *ec2iamAuthenticator) Authenticate() (*util.WrappedToken, error) {
 	secret, err := auth.performEC2IAMAuth()
 	if err != nil {
 		auth.log.Error().Err(err).Msg("ec2 iam authentication failed")
@@ -119,7 +120,7 @@ func (auth *authenticator) getCredentialsFromRole() (*credentials.Credentials, e
 	return creds, nil
 }
 
-func (auth *ec2iamAuthenticator) performEC2IAMAuth() (*api.Secret, error) {
+func (auth *ec2iamAuthenticator) performEC2IAMAuth() (*util.WrappedToken, error) {
 
 	auth.log.Info().Msg("starting authenticating with IAM role")
 
@@ -136,5 +137,5 @@ func (auth *ec2iamAuthenticator) performEC2IAMAuth() (*api.Secret, error) {
 		return nil, fmt.Errorf("could not authenticate to vault using IAM role authentication: %w", err)
 	}
 
-	return secret, nil
+	return util.NewWrappedToken(secret, true), nil
 }

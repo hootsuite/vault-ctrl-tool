@@ -8,6 +8,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	api "github.com/hashicorp/vault/api"
 	config "github.com/hootsuite/vault-ctrl-tool/v2/config"
+	util "github.com/hootsuite/vault-ctrl-tool/v2/util"
 	vaultclient "github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
 	reflect "reflect"
 )
@@ -65,11 +66,11 @@ func (mr *MockVaultClientMockRecorder) Delegate() *gomock.Call {
 }
 
 // FetchAWSSTSCredential mocks base method
-func (m *MockVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*vaultclient.AWSSTSCredential, *api.Secret, error) {
+func (m *MockVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*vaultclient.AWSSTSCredential, *util.WrappedToken, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchAWSSTSCredential", awsConfig)
 	ret0, _ := ret[0].(*vaultclient.AWSSTSCredential)
-	ret1, _ := ret[1].(*api.Secret)
+	ret1, _ := ret[1].(*util.WrappedToken)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }

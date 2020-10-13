@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"os"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestEmptyVaultToken(t *testing.T) {
 	vaultClient.EXPECT().Delegate().Return(newAPIClient)
 
 	bc := briefcase.NewBriefcase()
-	vaultToken := NewVaultToken(bc, vaultClient, "")
+	vaultToken := NewVaultToken(bc, vaultClient, "", true)
 
 	assert.Equal(t, "", vaultToken.Accessor(), "freshly created vault token must not have a token in it")
 	assert.Equal(t, "", vaultToken.TokenID(), "freshly crated vault token must not have a token in it")
@@ -80,10 +81,10 @@ func TestGetAndSetVaultToken(t *testing.T) {
 	vaultClient.EXPECT().Delegate().Return(newAPIClient)
 
 	bc := briefcase.NewBriefcase()
-	vaultToken := NewVaultToken(bc, vaultClient, "")
+	vaultToken := NewVaultToken(bc, vaultClient, "", true)
 
 	token := makeToken(t, "token-1")
-	err = vaultToken.Set(&token)
+	err = vaultToken.Set(util.NewWrappedToken(&token, true))
 	assert.NoError(t, err, "must be able to set token")
 
 	assert.Equal(t, "accessor:token-1", vaultToken.Accessor(), "accessor must match value in token")
@@ -100,10 +101,10 @@ func TestVerifyBriefcaseIfSet(t *testing.T) {
 	vaultClient.EXPECT().Delegate().Return(newAPIClient)
 
 	bc := briefcase.NewBriefcase()
-	vaultToken := NewVaultToken(bc, vaultClient, "")
+	vaultToken := NewVaultToken(bc, vaultClient, "", true)
 
 	token := makeToken(t, "token-1")
-	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), &token), "must be able to enroll example vault token in briefcase")
+	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&token, true)), "must be able to enroll example vault token in briefcase")
 
 	vaultClient.EXPECT().VerifyVaultToken("token-1").Return(&token, nil)
 
@@ -124,10 +125,10 @@ func TestBadBriefcaseGoodCLI(t *testing.T) {
 
 	bc := briefcase.NewBriefcase()
 	briefcaseToken := makeToken(t, "token-1")
-	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), &briefcaseToken), "must be able to enroll example vault token in briefcase")
+	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&briefcaseToken, true)), "must be able to enroll example vault token in briefcase")
 
 	cliToken := makeToken(t, "token-2")
-	vaultToken := NewVaultToken(bc, vaultClient, "token-2")
+	vaultToken := NewVaultToken(bc, vaultClient, "token-2", true)
 
 	vaultClient.EXPECT().VerifyVaultToken(gomock.Any()).DoAndReturn(
 		func(token string) (*api.Secret, error) {
@@ -156,9 +157,9 @@ func TestVerifySequence(t *testing.T) {
 
 	bc := briefcase.NewBriefcase()
 	briefcaseToken := makeToken(t, "token-1")
-	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), &briefcaseToken), "must be able to enroll example vault token in briefcase")
+	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&briefcaseToken, true)), "must be able to enroll example vault token in briefcase")
 
-	vaultToken := NewVaultToken(bc, vaultClient, "token-2")
+	vaultToken := NewVaultToken(bc, vaultClient, "token-2", true)
 	os.Setenv("VAULT_TOKEN", "token-3")
 
 	gomock.InOrder(

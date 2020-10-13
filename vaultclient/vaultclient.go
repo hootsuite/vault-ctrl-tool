@@ -3,6 +3,7 @@ package vaultclient
 import (
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 )
@@ -13,7 +14,7 @@ const SecretsServicePathV2 = "/kv/data/application-config/services/"
 type VaultClient interface {
 	VerifyVaultToken(vaultToken string) (*api.Secret, error)
 	Delegate() *api.Client
-	FetchAWSSTSCredential(awsConfig config.AWSType) (*AWSSTSCredential, *api.Secret, error)
+	FetchAWSSTSCredential(awsConfig config.AWSType) (*AWSSTSCredential, *util.WrappedToken, error)
 	CreateSSHCertificate(sshConfig config.SSHCertificateType) error
 	RefreshVaultToken() (*api.Secret, error)
 	ServiceSecretPrefix(configVersion int) string
@@ -61,7 +62,6 @@ func (vc *wrappedVaultClient) VerifyVaultToken(vaultToken string) (*api.Secret, 
 }
 
 func (vc *wrappedVaultClient) RefreshVaultToken() (*api.Secret, error) {
-	vc.log.Debug().Msg("refreshing period on vault token")
 	return vc.Delegate().Auth().Token().RenewSelf(86400) // this value is basically ignored by the server
 }
 

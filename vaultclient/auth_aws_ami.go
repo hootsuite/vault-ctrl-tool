@@ -11,7 +11,7 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 )
 
-func (auth *ec2amiAuthenticator) Authenticate() (*api.Secret, error) {
+func (auth *ec2amiAuthenticator) Authenticate() (*util.WrappedToken, error) {
 
 	secret, err := auth.performEC2AMIAuth()
 	if err != nil {
@@ -21,7 +21,7 @@ func (auth *ec2amiAuthenticator) Authenticate() (*api.Secret, error) {
 	return secret, nil
 }
 
-func (auth *ec2amiAuthenticator) performEC2AMIAuth() (*api.Secret, error) {
+func (auth *ec2amiAuthenticator) performEC2AMIAuth() (*util.WrappedToken, error) {
 
 	type login struct {
 		Role  string `json:"role"`
@@ -71,7 +71,7 @@ func (auth *ec2amiAuthenticator) performEC2AMIAuth() (*api.Secret, error) {
 		return nil, fmt.Errorf("could not parse response: %w", err)
 	}
 
-	return &secret, nil
+	return util.NewWrappedToken(&secret, true), nil
 }
 
 func (auth *ec2amiAuthenticator) fetchAMI() (string, error) {
