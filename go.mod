@@ -13,7 +13,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/api v0.18.8 // indirect
+	k8s.io/api v0.18.8
 	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v0.18.0
 	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
@@ -37,7 +36,7 @@ type kubernetesAuthenticator struct {
 	k8sAuthRole         string
 }
 type Authenticator interface {
-	Authenticate() (*api.Secret, error)
+	Authenticate() (*util.WrappedToken, error)
 }
 
 func NewAuthenticator(client VaultClient, cliFlags util.CliFlags) (Authenticator, error) {

@@ -3,7 +3,9 @@ package vaulttoken
 import (
 	"errors"
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"os"
+	"strconv"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
@@ -17,35 +19,42 @@ var ErrNoValidVaultTokenAvailable = errors.New("no currently valid valid token")
 
 type VaultToken interface {
 	CheckAndRefresh() error
-	Set(*api.Secret) error
+	Set(token *util.WrappedToken) error
 	Accessor() string
 	TokenID() string
 	Secret() *api.Secret
+	Wrapped() *util.WrappedToken
 }
 type vaultTokenManager struct {
 	log        zerolog.Logger
-	validToken *api.Secret
+	validToken *util.WrappedToken
 
 	accessor string
 	tokenID  string
 
-	vaultClient      vaultclient.VaultClient
-	briefcase        *briefcase.Briefcase
-	vaultTokenCliArg string
+	vaultClient          vaultclient.VaultClient
+	briefcase            *briefcase.Briefcase
+	vaultTokenCliArg     string
+	tokenRenewableCliArg bool
 }
 
-func NewVaultToken(briefcase *briefcase.Briefcase, vaultClient vaultclient.VaultClient, vaultTokenCliArg string) VaultToken {
+func NewVaultToken(briefcase *briefcase.Briefcase, vaultClient vaultclient.VaultClient, vaultTokenCliArg string, tokenRenewableCliArg bool) VaultToken {
 	log := zlog.With().Str("vaultAddr", vaultClient.Delegate().Address()).Logger()
 
 	return &vaultTokenManager{
-		log:              log,
-		briefcase:        briefcase,
-		vaultClient:      vaultClient,
-		vaultTokenCliArg: vaultTokenCliArg,
+		log:                  log,
+		briefcase:            briefcase,
+		vaultClient:          vaultClient,
+		vaultTokenCliArg:     vaultTokenCliArg,
+		tokenRenewableCliArg: tokenRenewableCliArg,
 	}
 }
 
 func (vt *vaultTokenManager) Secret() *api.Secret {
+	return vt.validToken.Secret
+}
+
+func (vt *vaultTokenManager) Wrapped() *util.WrappedToken {
 	return vt.validToken
 }
 
@@ -57,7 +66,7 @@ func (vt *vaultTokenManager) TokenID() string {
 	return vt.tokenID
 }
 
-func (vt *vaultTokenManager) Set(authToken *api.Secret) error {
+func (vt *vaultTokenManager) Set(authToken *util.WrappedToken) error {
 
 	token, err := authToken.TokenID()
 	if err != nil {
@@ -96,7 +105,7 @@ func (vt *vaultTokenManager) CheckAndRefresh() error {
 // determineVaultToken looks through the various ways a vault token may already exist (briefcase, flag, env variable),
 // and checks with the vault server if the token is still good, optionally refreshing it. If there isn't a vault
 // token around, it returns ErrNoValidVaultTokenAvailable.
-func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
+func (vt *vaultTokenManager) determineVaultToken() (*util.WrappedToken, error) {
 	if vt.briefcase != nil && vt.briefcase.AuthTokenLease.Token != "" {
 		log := vt.log.With().Str("source", "briefcase").Logger()
 
@@ -108,7 +117,7 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 		} else {
 			accessor, _ := secret.TokenAccessor()
 			log.Debug().Str("accessor", accessor).Msg("current briefcase token is usable")
-			return secret, nil
+			return util.NewWrappedToken(secret, vt.briefcase.AuthTokenLease.Renewable), nil
 		}
 	}
 
@@ -121,8 +130,8 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 			log.Info().Err(err).Msg("current cli token is not usable")
 		} else {
 			accessor, _ := secret.TokenAccessor()
-			log.Debug().Str("accessor", accessor).Msg("current cli token is usable")
-			return secret, nil
+			log.Debug().Str("accessor", accessor).Bool("tokenRenewableCliArg", vt.tokenRenewableCliArg).Msg("current cli token is usable")
+			return util.NewWrappedToken(secret, vt.tokenRenewableCliArg), nil
 		}
 	}
 
@@ -137,7 +146,21 @@ func (vt *vaultTokenManager) determineVaultToken() (*api.Secret, error) {
 		} else {
 			accessor, _ := secret.TokenAccessor()
 			log.Debug().Str("accessor", accessor).Msg("current VAULT_TOKEN is usable")
-			return secret, nil
+
+			renewable := true
+
+			if renewableOverride, ok := os.LookupEnv("TOKEN_RENEWABLE"); ok {
+				renewable, err = strconv.ParseBool(renewableOverride)
+				if err != nil {
+					log.Warn().Err(err).
+						Str("TOKEN_RENEWABLE", renewableOverride).
+						Msg("environment variable TOKEN_RENEWABLE is not parsable as boolean - ignoring")
+				} else {
+					renewable = true
+				}
+			}
+
+			return util.NewWrappedToken(secret, renewable), nil
 		}
 	}
 

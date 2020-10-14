@@ -9,7 +9,6 @@ import (
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 
-	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/rs/zerolog"
@@ -50,6 +49,7 @@ type sshCert struct {
 
 type LeasedAuthToken struct {
 	Accessor    string    `json:"accessor"`
+	Renewable   bool      `json:"renewable"`
 	Token       string    `json:"token"`
 	ExpiresAt   time.Time `json:"expiry"`
 	NextRefresh time.Time `json:"next_refresh"`
@@ -113,7 +113,7 @@ func LoadBriefcase(filename string) (*Briefcase, error) {
 
 // EnrollVaultToken adds the specified vault token (from Vault) to the briefcase. It captures some expiry information
 // so it knows when it needs to be refreshed.
-func (b *Briefcase) EnrollVaultToken(ctx context.Context, token *api.Secret) error {
+func (b *Briefcase) EnrollVaultToken(ctx context.Context, token *util.WrappedToken) error {
 
 	if token == nil {
 		return errors.New("can only enroll non-nil tokens")
@@ -139,12 +139,13 @@ func (b *Briefcase) EnrollVaultToken(ctx context.Context, token *api.Secret) err
 	authToken := LeasedAuthToken{
 		Token:       tokenID,
 		Accessor:    accessor,
+		Renewable:   token.Renewable,
 		ExpiresAt:   now.Add(ttl),
 		NextRefresh: now.Add(ttl / 3),
 	}
 
 	if b.AuthTokenLease.Token != tokenID {
-		b.log = zlog.With().Str("accessor", accessor).Logger()
+		b.log = zlog.With().Str("accessor", accessor).Bool("renewable", authToken.Renewable).Logger()
 		b.log.Info().Str("ttl", ttl.String()).Str("nextRefresh", authToken.NextRefresh.String()).Msg("enrolling vault token with specified ttl into briefcase")
 	} else {
 		b.log.Info().Time("expiresAt", authToken.ExpiresAt).Time("nextRefresh", authToken.NextRefresh).Msg("vault token refreshed")
@@ -177,7 +178,26 @@ func (b *Briefcase) SaveAs(filename string) error {
 }
 
 // ShouldRefreshVaultToken will return true if it's time to do periodic refresh of the Vault token being
-// used by the tool. This time is established when the token is enrolled into the briefcase.
+// used by the tool. This time is established when the token is enrolled into the briefcase. It will return
+// false if the token is not renewable. If the token is needs a refresh but is non-renewable, then it will
+// log (but not throw) an error.
 func (b *Briefcase) ShouldRefreshVaultToken(ctx context.Context) bool {
-	return clock.Now(ctx).After(b.AuthTokenLease.NextRefresh)
+
+	expiring := clock.Now(ctx).After(b.AuthTokenLease.NextRefresh)
+
+	if expiring && !b.AuthTokenLease.Renewable {
+		// now >= expiredAt
+		if !clock.Now(ctx).Before(b.AuthTokenLease.ExpiresAt) {
+			b.log.Error().Time("expiresAt", b.AuthTokenLease.ExpiresAt).
+				Time("nextRefresh", b.AuthTokenLease.NextRefresh).
+				Msg("token has expired and is not renewable - results are unpredictable")
+		} else {
+			b.log.Error().Time("expiresAt", b.AuthTokenLease.ExpiresAt).
+				Time("nextRefresh", b.AuthTokenLease.NextRefresh).
+				Msg("token is expiring, but is set to be non-renewable - unpredictable results will occur once it expires.")
+		}
+		return false
+	}
+
+	return expiring
 }

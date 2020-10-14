@@ -2,9 +2,9 @@ package vaultclient
 
 import (
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"path/filepath"
 
-	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
 )
 
@@ -14,7 +14,7 @@ type AWSSTSCredential struct {
 	SessionToken string
 }
 
-func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*AWSSTSCredential, *api.Secret, error) {
+func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*AWSSTSCredential, *util.WrappedToken, error) {
 
 	path := filepath.Join(awsConfig.VaultMountPoint, "creds", awsConfig.VaultRole)
 
@@ -40,5 +40,5 @@ func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*
 		AccessKey:    accessKey.(string),
 		SecretKey:    secretKey.(string),
 		SessionToken: securityToken.(string),
-	}, result, nil
+	}, util.NewWrappedToken(result, true), nil
 }

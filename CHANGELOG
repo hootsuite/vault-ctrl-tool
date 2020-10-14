@@ -1,3 +1,9 @@
+13-Oct-2020
+ * vault-token ConfigMap supports "renewable" which is used to tell v-c-t to not renew the vault token in the ConfigMap
+ * TOKEN_RENEWABLE environment variable can be used to disable renewing a passed in VAULT_TOKEN
+ * --token-renewable can be set to "false" to disable renewing the token passed in on the command line
+ * NOTE: these mechanisms only disable their respective token. For example TOKEN_RENEWABLE=false has no effect on ConfigMap
+   or tokens passed in as CLI args.
 
 23-Sep-2020
  * Started CHANGELOG

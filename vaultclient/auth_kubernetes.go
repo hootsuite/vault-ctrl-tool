@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	v12 "k8s.io/api/core/v1"
 	"net/http"
+	"strconv"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
@@ -15,7 +17,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-func (auth *kubernetesAuthenticator) Authenticate() (*api.Secret, error) {
+func (auth *kubernetesAuthenticator) Authenticate() (*util.WrappedToken, error) {
 	secret, err := auth.performKubernetesAuth()
 	if err != nil {
 		auth.log.Error().Err(err).Msg("kubernetes authentication failed")
@@ -25,7 +27,7 @@ func (auth *kubernetesAuthenticator) Authenticate() (*api.Secret, error) {
 	return secret, nil
 }
 
-func (auth *kubernetesAuthenticator) performKubernetesAuth() (*api.Secret, error) {
+func (auth *kubernetesAuthenticator) performKubernetesAuth() (*util.WrappedToken, error) {
 	type login struct {
 		JWT  string `json:"jwt"`
 		Role string `json:"role"`
@@ -70,14 +72,14 @@ func (auth *kubernetesAuthenticator) performKubernetesAuth() (*api.Secret, error
 		return nil, fmt.Errorf("error parsing response: %w", err)
 	}
 
-	return &body, nil
+	return util.NewWrappedToken(&body, true), nil
 }
 
 // If there is a ConfigMap named vault-token in the default namespace, use the token it stores
 // Developers running Kubernetes clusters locally do not have the ability to have their services authenticate to Vault.
 // To work around this, the bootstrapping shell scripts for dev clusters create a configmap called "vault-token"
 // with their Vault token in it. This stanza checks for that special configmap and uses it.
-func (auth *kubernetesAuthenticator) tryHardCodedToken() (*api.Secret, error) {
+func (auth *kubernetesAuthenticator) tryHardCodedToken() (*util.WrappedToken, error) {
 	if util.EnableKubernetesVaultTokenAuthentication {
 		config, err := rest.InClusterConfig()
 		// If we cannot create the in cluster config, that means we are not running inside of Kubernetes
@@ -94,22 +96,42 @@ func (auth *kubernetesAuthenticator) tryHardCodedToken() (*api.Secret, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ConfigMaps filtered on the metadata.name=vault-token")
 		} else if len(configMaps.Items) == 1 {
-			if token, exists := configMaps.Items[0].Data["token"]; exists {
-				auth.log.Info().Msg("logging into Vault server %q with token from vault-token ConfigMap")
-
-				secret, err := auth.vaultClient.VerifyVaultToken(token)
-				if err != nil {
-					return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
-				}
-				if secret == nil {
-					return nil, fmt.Errorf("got nil secret authenticating to Vault Server %q using token from vault-token ConfigMap", auth.vaultClient.Delegate().Address())
-				}
-				return secret, nil
-			}
+			return auth.ProcessConfigMap(configMaps.Items[0])
 		} else {
 			return nil, errors.New("multiple ConfigMaps were returned when filtering ConfigMaps with metadata.name=vault-token; please remove all but one")
 		}
 	}
 
 	return nil, errors.New("hard coded vault-token ConfigMap disabled")
+}
+
+func (auth *kubernetesAuthenticator) ProcessConfigMap(item v12.ConfigMap) (*util.WrappedToken, error) {
+	if token, exists := item.Data["token"]; exists {
+		auth.log.Info().Msg("logging into Vault server %q with token from vault-token ConfigMap")
+
+		secret, err := auth.vaultClient.VerifyVaultToken(token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
+		}
+		if secret == nil {
+			return nil, fmt.Errorf("got nil secret authenticating to Vault Server %q using token from vault-token ConfigMap", auth.vaultClient.Delegate().Address())
+		}
+
+		// For backwards compatibility, tokens are expected to be renewable. This can be overridden if "renewable: false" is set in the configmap.
+		renewable := true
+
+		if renewableOverride, exists := item.Data["renewable"]; exists {
+			if renewable, err = strconv.ParseBool(renewableOverride); err != nil {
+				return nil, fmt.Errorf("ConfigMap vault-token key \"renewable\" has value %q which cannot be parsed as boolean :%w",
+					renewableOverride, err)
+			}
+		}
+
+		if !renewable {
+			auth.log.Info().Msg("using non-renewable Vault token from Kubernetes ConfigMap")
+		}
+		return util.NewWrappedToken(secret, renewable), nil
+	} else {
+		return nil, errors.New("missing token field in vault-token ConfigMap")
+	}
 }
