@@ -184,10 +184,18 @@ func (b *Briefcase) SaveAs(filename string) error {
 func (b *Briefcase) ShouldRefreshVaultToken(ctx context.Context) bool {
 
 	expiring := clock.Now(ctx).After(b.AuthTokenLease.NextRefresh)
+
 	if expiring && !b.AuthTokenLease.Renewable {
-		b.log.Error().Time("expiresAt", b.AuthTokenLease.ExpiresAt).
-			Time("nextRefresh", b.AuthTokenLease.NextRefresh).
-			Msg("token is expiring, but is set to be non-renewable - unpredictable results will occur once it expires.")
+		// now >= expiredAt
+		if !clock.Now(ctx).Before(b.AuthTokenLease.ExpiresAt) {
+			b.log.Error().Time("expiresAt", b.AuthTokenLease.ExpiresAt).
+				Time("nextRefresh", b.AuthTokenLease.NextRefresh).
+				Msg("token has expired and is not renewable - results are unpredictable")
+		} else {
+			b.log.Error().Time("expiresAt", b.AuthTokenLease.ExpiresAt).
+				Time("nextRefresh", b.AuthTokenLease.NextRefresh).
+				Msg("token is expiring, but is set to be non-renewable - unpredictable results will occur once it expires.")
+		}
 		return false
 	}
 

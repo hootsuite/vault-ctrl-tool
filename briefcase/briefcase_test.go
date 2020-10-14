@@ -3,11 +3,13 @@ package briefcase
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
+	testing2 "k8s.io/utils/clock/testing"
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/stretchr/testify/assert"
@@ -110,10 +112,32 @@ func TestExpiringTokenNeedsRefresh(t *testing.T) {
 	token := myToken(t)
 
 	token.Data["ttl"] = 299
-	fmt.Printf("%+v\n", token)
 
 	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&token, true)), "must be able to enroll example token in briefcase")
 	assert.True(t, bc.ShouldRefreshVaultToken(context.TODO()), "token expiring in less than 5 minutes must require a refresh")
+}
+
+func TestExpiringNonRenewableTokenNeverNeedsRefresh(t *testing.T) {
+	bc := NewBriefcase()
+	token := myToken(t)
+
+	token.Data["ttl"] = 1
+
+	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&token, false)), "must be able to enroll example token in briefcase")
+	assert.False(t, bc.ShouldRefreshVaultToken(context.TODO()), "non renewable token must never need refreshing")
+}
+
+func TestExpiredNonRenewableTokenNeverNeedsRefresh(t *testing.T) {
+	bc := NewBriefcase()
+	token := myToken(t)
+
+	fakeClock := testing2.NewFakeClock(time.Now())
+	clockContext := clock.Set(context.Background(), fakeClock)
+
+	assert.NoError(t, bc.EnrollVaultToken(clockContext, util.NewWrappedToken(&token, false)), "must be able to enroll example token in briefcase")
+
+	fakeClock.Sleep(100 * time.Hour)
+	assert.False(t, bc.ShouldRefreshVaultToken(clockContext), "non renewable token must never need refreshing")
 }
 
 func TestNilTokenEnrollment(t *testing.T) {

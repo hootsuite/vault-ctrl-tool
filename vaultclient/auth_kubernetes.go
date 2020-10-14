@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	v12 "k8s.io/api/core/v1"
 	"net/http"
 	"strconv"
 
@@ -95,36 +96,42 @@ func (auth *kubernetesAuthenticator) tryHardCodedToken() (*util.WrappedToken, er
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ConfigMaps filtered on the metadata.name=vault-token")
 		} else if len(configMaps.Items) == 1 {
-			if token, exists := configMaps.Items[0].Data["token"]; exists {
-				auth.log.Info().Msg("logging into Vault server %q with token from vault-token ConfigMap")
-
-				secret, err := auth.vaultClient.VerifyVaultToken(token)
-				if err != nil {
-					return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
-				}
-				if secret == nil {
-					return nil, fmt.Errorf("got nil secret authenticating to Vault Server %q using token from vault-token ConfigMap", auth.vaultClient.Delegate().Address())
-				}
-
-				// For backwards compatibility, tokens are expected to be renewable. This can be overridden if "renewable: false" is set in the configmap.
-				renewable := true
-
-				if renewableOverride, exists := configMaps.Items[0].Data["renewable"]; exists {
-					if renewable, err = strconv.ParseBool(renewableOverride); err != nil {
-						return nil, fmt.Errorf("ConfigMap vault-token key \"renewable\" has value %q which cannot be parsed as boolean :%w",
-							renewableOverride, err)
-					}
-				}
-
-				if !renewable {
-					auth.log.Info().Msg("using non-renewable Vault token from Kubernetes ConfigMap")
-				}
-				return util.NewWrappedToken(secret, renewable), nil
-			}
+			return auth.ProcessConfigMap(configMaps.Items[0])
 		} else {
 			return nil, errors.New("multiple ConfigMaps were returned when filtering ConfigMaps with metadata.name=vault-token; please remove all but one")
 		}
 	}
 
 	return nil, errors.New("hard coded vault-token ConfigMap disabled")
+}
+
+func (auth *kubernetesAuthenticator) ProcessConfigMap(item v12.ConfigMap) (*util.WrappedToken, error) {
+	if token, exists := item.Data["token"]; exists {
+		auth.log.Info().Msg("logging into Vault server %q with token from vault-token ConfigMap")
+
+		secret, err := auth.vaultClient.VerifyVaultToken(token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
+		}
+		if secret == nil {
+			return nil, fmt.Errorf("got nil secret authenticating to Vault Server %q using token from vault-token ConfigMap", auth.vaultClient.Delegate().Address())
+		}
+
+		// For backwards compatibility, tokens are expected to be renewable. This can be overridden if "renewable: false" is set in the configmap.
+		renewable := true
+
+		if renewableOverride, exists := item.Data["renewable"]; exists {
+			if renewable, err = strconv.ParseBool(renewableOverride); err != nil {
+				return nil, fmt.Errorf("ConfigMap vault-token key \"renewable\" has value %q which cannot be parsed as boolean :%w",
+					renewableOverride, err)
+			}
+		}
+
+		if !renewable {
+			auth.log.Info().Msg("using non-renewable Vault token from Kubernetes ConfigMap")
+		}
+		return util.NewWrappedToken(secret, renewable), nil
+	} else {
+		return nil, errors.New("missing token field in vault-token ConfigMap")
+	}
 }
