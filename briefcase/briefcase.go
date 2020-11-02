@@ -26,20 +26,23 @@ type Briefcase struct {
 	StaticTemplates        map[string]bool                `json:"static_templates,omitempty"`
 	TokenScopedSecrets     map[string]bool                `json:"tokenscoped_secrets,omitempty"`
 	StaticScopedSecrets    map[string]bool                `json:"static_secrets,omitempty"`
+	VersionScopedSecrets   map[string]int                 `json:"versioned_secrets,omitempty"`
 	TokenScopedComposites  map[string]bool                `json:"tokenscoped_composites,omitempty"`
 	StaticScopedComposites map[string]bool                `json:"static_composites,omitempty"`
 
 	// cache of secrets, not persisted
-	tokenScopedCache  []SimpleSecret
-	staticScopedCache []SimpleSecret
+	secretCache map[util.SecretLifetime][]SimpleSecret
 
 	log zerolog.Logger
 }
 
+// SimpleSecret is a field in a secret, but also contains some important information about the secret itself.
 type SimpleSecret struct {
-	Key   string
-	Field string
-	Value interface{}
+	Key         string
+	Field       string
+	Value       interface{}
+	Version     *int
+	CreatedTime *time.Time
 }
 
 type sshCert struct {
@@ -69,9 +72,11 @@ func NewBriefcase() *Briefcase {
 		StaticTemplates:        make(map[string]bool),
 		TokenScopedSecrets:     make(map[string]bool),
 		StaticScopedSecrets:    make(map[string]bool),
+		VersionScopedSecrets:   make(map[string]int),
 		TokenScopedComposites:  make(map[string]bool),
 		StaticScopedComposites: make(map[string]bool),
 		log:                    zlog.Logger,
+		secretCache:            make(map[util.SecretLifetime][]SimpleSecret),
 	}
 }
 
@@ -89,9 +94,9 @@ func (b *Briefcase) ResetBriefcase() *Briefcase {
 	newBriefcase.SSHCertificates = b.SSHCertificates
 
 	newBriefcase.StaticScopedSecrets = b.StaticScopedSecrets
+	newBriefcase.VersionScopedSecrets = b.VersionScopedSecrets
 	newBriefcase.StaticScopedComposites = b.StaticScopedComposites
 	newBriefcase.StaticTemplates = b.StaticTemplates
-	newBriefcase.staticScopedCache = b.staticScopedCache
 	return newBriefcase
 }
 

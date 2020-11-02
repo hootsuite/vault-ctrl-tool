@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,10 +31,11 @@ func WriteComposite(composite config.CompositeSecretFile, cache briefcase.Secret
 	var kvSecrets []briefcase.SimpleSecret
 
 	// make a copy
-	kvSecrets = append(kvSecrets, cache.GetStaticSecrets()...)
+	kvSecrets = append(kvSecrets, cache.GetSecrets(util.LifetimeStatic)...)
+	kvSecrets = append(kvSecrets, cache.GetSecrets(util.LifetimeVersion)...)
 
 	if composite.Lifetime == util.LifetimeToken {
-		kvSecrets = append(kvSecrets, cache.GetTokenSecrets()...)
+		kvSecrets = append(kvSecrets, cache.GetSecrets(util.LifetimeToken)...)
 	}
 
 	data, err := collectSecrets(log, composite, kvSecrets)
@@ -53,17 +55,7 @@ func WriteComposite(composite config.CompositeSecretFile, cache briefcase.Secret
 	return nil
 }
 
-func WriteSecret(secret config.SecretType, cache briefcase.SecretsCache) error {
-
-	var kvSecrets []briefcase.SimpleSecret
-
-	// make a copy
-	kvSecrets = append(kvSecrets, cache.GetStaticSecrets()...)
-
-	if secret.Lifetime == util.LifetimeToken {
-		kvSecrets = append(kvSecrets, cache.GetTokenSecrets()...)
-	}
-
+func WriteSecret(secret config.SecretType, kvSecrets []briefcase.SimpleSecret) error {
 	mode, err := util.StringToFileMode(secret.Mode)
 
 	if err != nil {
@@ -102,10 +94,18 @@ func writeField(secret config.SecretType, kvSecrets []briefcase.SimpleSecret, fi
 
 		defer file.Close()
 
-		zlog.Info().Str("field", field.Name).Str("key", secret.Key).Str("output", field.Output).Msg("writing field to file")
+		zlog.Info().Str("field", field.Name).Str("key", secret.Key).Str("output", field.Output).Str("encoding", field.Encoding).Msg("writing field to file")
 
-		_, err = fmt.Fprint(file, value)
-
+		switch field.Encoding {
+		case util.EncodingBase64:
+			decoded, err := base64.StdEncoding.DecodeString(fmt.Sprint(value))
+			if err != nil {
+				return fmt.Errorf("failed to base64 decode field %q for secret %q: %w", field.Name, secret.Key, err)
+			}
+			_, err = fmt.Fprint(file, decoded)
+		default:
+			_, err = fmt.Fprint(file, value)
+		}
 		if err != nil {
 			return fmt.Errorf("failed writing secret to file %q: %w", field.Output, err)
 		}

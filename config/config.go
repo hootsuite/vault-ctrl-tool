@@ -5,12 +5,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // VaultTokenType for writing the contents of a VAULT_TOKEN to the specified file with the specified mode.
@@ -38,13 +39,29 @@ type SecretType struct {
 	Lifetime       util.SecretLifetime `yaml:"lifetime"`
 	Mode           string              `yaml:"mode"`
 	IsMissingOk    bool                `yaml:"missingOk"`
+	PinnedVersion  *int                `yaml:"pinnedVersion,omitempty"`
+}
+
+// NeedsMetadata determines if the tool needs metadata from Vault in order to correctly process the secret. This will
+// cause errors if the metadata for a secret isn't available and it's needed.
+func (secretType *SecretType) NeedsMetadata() bool {
+	if secretType == nil {
+		return false
+	}
+
+	if secretType.Lifetime == util.LifetimeVersion || secretType.PinnedVersion != nil {
+		return true
+	}
+
+	return false
 }
 
 // SecretFieldType is used to just output the contents of specific fields to specific files. Their mode will
 // be the same as "mode" in the SecretType they belong.
 type SecretFieldType struct {
-	Name   string `yaml:"name"`
-	Output string `yaml:"output"`
+	Name     string `yaml:"name"`
+	Output   string `yaml:"output"`
+	Encoding string `yaml:"encoding"`
 }
 
 // SSHCertificateType for SSH certificate signing. This tool will write private, public, and certificate files to the
@@ -206,6 +223,13 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 			tpl.Input = util.AbsolutePath(inputPrefix, tpl.Input)
 		}
 
+		if tpl.Lifetime == util.LifetimeVersion {
+			// If you're seeing this, it's not because it isn't valuable - it surely is - but it's more work than I want
+			// to tackle right now.
+			cfg.log.Warn().Str("template", tpl.Input).Msgf("templates do not support %q lifetime", util.LifetimeVersion)
+			happy = false
+		}
+
 		if tpl.Lifetime != util.LifetimeStatic && tpl.Lifetime != util.LifetimeToken {
 			cfg.log.Warn().Str("template", tpl.Input).Msg("template is missing a lifetime attribute")
 			happy = false
@@ -225,16 +249,24 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 	var tidySecrets []SecretType
 
 	for _, secret := range cfg.Secrets {
+
 		if secret.Key == "" {
 			cfg.log.Warn().Msg("there is a secret stanza missing a 'key' value in the configuration file")
 			happy = false
+			continue
+		}
+
+		if secret.Path == "" {
+			cfg.log.Warn().Str("secret", secret.Key).Msg("no Vault path specified for secret in configuration file")
+			happy = false
+			continue
 		}
 
 		if secret.Lifetime == "" && cfg.ConfigVersion < 3 {
 			secret.Lifetime = util.LifetimeStatic
 		}
 
-		if secret.Lifetime != util.LifetimeStatic && secret.Lifetime != util.LifetimeToken {
+		if secret.Lifetime != util.LifetimeStatic && secret.Lifetime != util.LifetimeToken && secret.Lifetime != util.LifetimeVersion {
 			cfg.log.Warn().Str("secret", secret.Key).Msg("secret is missing a lifetime attribute")
 			happy = false
 		}
@@ -243,6 +275,12 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 		for _, field := range secret.Fields {
 			if field.Name == "" {
 				cfg.log.Warn().Str("secret", secret.Key).Msg("there is a field in this secret missing 'name' value in the configuration file")
+				happy = false
+			}
+
+			field.Encoding = strings.ToLower(field.Encoding)
+			if field.Encoding != "" && field.Encoding != util.EncodingBase64 && field.Encoding != util.EncodingNone {
+				cfg.log.Warn().Str("secret", secret.Key).Str("field", field.Name).Str("encoding", field.Encoding).Msg("if specified, encoding msut be \"none\" or \"base64\"")
 				happy = false
 			}
 			if field.Output == "" {
@@ -260,8 +298,14 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 			secret.Output = util.AbsolutePath(outputPrefix, secret.Output)
 		}
 
-		if secret.Path == "" {
-			return fmt.Errorf("no Vault path specified for secrets key %q in configuration file", secret.Key)
+		if secret.Output != "" && secret.Lifetime == util.LifetimeVersion {
+			cfg.log.Warn().Str("key", secret.Key).Str("output", secret.Output).Msgf("cannot use an output file when a secret has a lifetime of %q; this only works with fields of a secret", util.LifetimeVersion)
+			happy = false
+		}
+
+		if secret.Lifetime == util.LifetimeVersion && len(secret.Fields) == 0 {
+			cfg.log.Warn().Str("key", secret.Key).Msgf("at least one field of a secret must be specified when using a lifetime of %q", util.LifetimeVersion)
+			happy = false
 		}
 
 		if secret.Key != "" && keys[secret.Key] {

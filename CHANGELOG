@@ -1,3 +1,10 @@
+04-Nov-2020
+ * secrets that are only output raw fields can now have a lifetime of "version". The output of these fields
+   will be updated when the version # of the secret changes
+ * output of raw fields support base64 decoding
+ * secrets can be pinned to a specific version - this is generally inadvisable, but can be done if needed
+   for testing
+
 13-Oct-2020
  * vault-token ConfigMap supports "renewable" which is used to tell v-c-t to not renew the vault token in the ConfigMap
  * TOKEN_RENEWABLE environment variable can be used to disable renewing a passed in VAULT_TOKEN

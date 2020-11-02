@@ -154,6 +154,11 @@ func TestResetBriefcase(t *testing.T) {
 		"b": true,
 	}
 
+	sversioned := map[string]int{
+		"a": 3,
+		"b": 8,
+	}
+
 	aws := map[string]leasedAWSCredential{
 		"foo": {},
 		"bar": {},
@@ -172,6 +177,7 @@ func TestResetBriefcase(t *testing.T) {
 	big.StaticScopedSecrets = s
 	big.TokenScopedComposites = s
 	big.StaticScopedComposites = s
+	big.VersionScopedSecrets = sversioned
 
 	small := NewBriefcase()
 	small.AWSCredentialLeases = aws
@@ -179,8 +185,8 @@ func TestResetBriefcase(t *testing.T) {
 	small.StaticTemplates = s
 	small.StaticScopedSecrets = s
 	small.StaticScopedComposites = s
-
+	small.VersionScopedSecrets = sversioned
 	resetBig := big.ResetBriefcase()
 
-	assert.EqualValues(t, small, resetBig, "reseting a briefcase should leave non-token scoped data")
+	assert.EqualValues(t, small, resetBig, "resetting a briefcase should leave non-token scoped data")
 }

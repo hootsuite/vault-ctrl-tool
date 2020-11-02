@@ -7,36 +7,26 @@ import "github.com/hootsuite/vault-ctrl-tool/v2/util"
 type SecretsCache interface {
 	HasCachedSecrets(lifetime util.SecretLifetime) bool
 	StoreSecrets(lifetime util.SecretLifetime, secrets []SimpleSecret)
-	GetStaticSecrets() []SimpleSecret
-	GetTokenSecrets() []SimpleSecret
+	GetSecrets(lifetime util.SecretLifetime) []SimpleSecret
 }
 
 func (b *Briefcase) HasCachedSecrets(lifetime util.SecretLifetime) bool {
-	if lifetime == util.LifetimeToken {
-		return len(b.tokenScopedCache) > 0
-	} else if lifetime == util.LifetimeStatic {
-		return len(b.staticScopedCache) > 0
+	switch lifetime {
+	case util.LifetimeToken, util.LifetimeStatic:
+		return len(b.secretCache[lifetime]) > 0
+	case util.LifetimeVersion:
+		b.log.Error().Msgf("secrets with the lifetime of %q are never cached", util.LifetimeVersion)
+		return false
+	default:
+		b.log.Error().Interface("lifetime", lifetime).Msg("internal error: specified lifetime is never cached")
+		return false
 	}
-
-	b.log.Error().Interface("lifetime", lifetime).Msg("internal error: unknown lifetime")
-
-	return false
 }
 
 func (b *Briefcase) StoreSecrets(lifetime util.SecretLifetime, secrets []SimpleSecret) {
-	if lifetime == util.LifetimeStatic {
-		b.staticScopedCache = secrets
-	} else if lifetime == util.LifetimeToken {
-		b.tokenScopedCache = secrets
-	} else {
-		b.log.Error().Interface("lifetime", lifetime).Msg("internal error: unable to cache secrets with unknown lifetime")
-	}
+	b.secretCache[lifetime] = secrets
 }
 
-func (b *Briefcase) GetStaticSecrets() []SimpleSecret {
-	return b.staticScopedCache
-}
-
-func (b *Briefcase) GetTokenSecrets() []SimpleSecret {
-	return b.tokenScopedCache
+func (b *Briefcase) GetSecrets(lifetime util.SecretLifetime) []SimpleSecret {
+	return b.secretCache[lifetime]
 }

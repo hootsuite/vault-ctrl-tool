@@ -17,12 +17,12 @@ func WriteTemplate(tpl config.TemplateType, templates map[string]*template.Templ
 
 	tplVars := make(map[string]interface{})
 
-	for _, s := range cache.GetStaticSecrets() {
+	for _, s := range cache.GetSecrets(util.LifetimeStatic) {
 		tplVars[s.Key+"_"+s.Field] = s.Value
 	}
 
 	if tpl.Lifetime == util.LifetimeToken {
-		for _, s := range cache.GetTokenSecrets() {
+		for _, s := range cache.GetSecrets(util.LifetimeToken) {
 			key := s.Key + "_" + s.Field
 			if _, dupe := tplVars[key]; dupe {
 				log.Warn().Str("key", key).Msg("overwriting static secret key with a value from a token-scoped secret")
