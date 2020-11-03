@@ -151,7 +151,7 @@ func PerformCleanup(flags util.CliFlags) error {
 			if err != nil {
 				log.Error().Err(err).Msg("could not create new vault client to revoke token")
 			} else {
-				vaultClient.Delegate().SetToken(bc.AuthTokenLease.Token)
+				vaultClient.SetToken(bc.AuthTokenLease.Token)
 				if err := vaultClient.Delegate().Auth().Token().RevokeSelf("ignored"); err != nil {
 					log.Warn().Err(err).Msg("unable to revoke vault token")
 				}

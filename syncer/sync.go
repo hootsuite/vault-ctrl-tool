@@ -2,6 +2,7 @@ package syncer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/hashicorp/vault/api"
@@ -73,7 +74,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 		return err
 	}
 
-	s.vaultClient.Delegate().SetToken(vaultToken.TokenID())
+	s.vaultClient.SetToken(vaultToken.TokenID())
 
 	// First we compare the vault token we're using with the one in the briefcase. If it's different, then
 	// we reset the briefcase to start over. We do this here to ease the briefcase compare below. We also
@@ -241,7 +242,7 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 // vault token if needed.
 func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, error) {
 
-	log := s.log.With().Str("vaultAddr", s.vaultClient.Delegate().Address()).Logger()
+	log := s.log.With().Str("vaultAddr", s.vaultClient.Address()).Logger()
 
 	log.Info().Msg("obtaining vault token")
 
@@ -328,7 +329,7 @@ func (s *Syncer) readSecret(secret config.SecretType) ([]briefcase.SimpleSecret,
 
 	key := secret.Key
 
-	log := s.log.With().Str("path", secret.Path).Str("vaultAddr", s.vaultClient.Delegate().Address()).Logger()
+	log := s.log.With().Str("path", secret.Path).Str("vaultAddr", s.vaultClient.Address()).Logger()
 
 	// Some secrets require metadata to be processed correctly based on their configuration.
 	if s.config.VaultConfig.ConfigVersion < 2 && secret.NeedsMetadata() {
@@ -362,7 +363,7 @@ func (s *Syncer) readSecret(secret config.SecretType) ([]briefcase.SimpleSecret,
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("error fetching secret %q from %q: %w", path, s.vaultClient.Delegate().Address(), err)
+		return nil, fmt.Errorf("error fetching secret %q from %q: %w", path, s.vaultClient.Address(), err)
 	}
 
 	if response == nil {
@@ -379,34 +380,24 @@ func (s *Syncer) readSecret(secret config.SecretType) ([]briefcase.SimpleSecret,
 		// "metadata". This code breaks if a KVv1 secret has a field called "data".
 
 		var secretData map[string]interface{}
-		var secretMetadata map[string]string
-		var secretVersion *int
+		var secretMetadata map[string]interface{}
+		var secretVersion *int64
 		var secretCreated *time.Time
 
 		if s.config.VaultConfig.ConfigVersion < 2 {
 			secretData = response.Data
 		} else {
+			var hasMetadata, hasData bool
 			// We guess we're in KVv2 if there's both a "data" and "metadata" in the response "data" stanza.
-			subData, hasData := response.Data["data"].(map[string]interface{})
-			_, hasMetadata := response.Data["metadata"].(map[string]interface{})
+			secretData, hasData = response.Data["data"].(map[string]interface{})
+			secretMetadata, hasMetadata = response.Data["metadata"].(map[string]interface{})
 
 			// It's a failure if we need metadata to process this secret, and we're not a KVv2 secret.
 			if secret.NeedsMetadata() && (!hasData || !hasMetadata) {
-				return nil, fmt.Errorf("error getting KVv2 secret %q from %q: probably not in a KVv2 path", path, s.vaultClient.Delegate().Address())
+				return nil, fmt.Errorf("error getting KVv2 secret %q from %q: probably not in a KVv2 path", path, s.vaultClient.Address())
 			}
 
-			if hasData && hasMetadata {
-				secretData = subData
-				if secret.NeedsMetadata() {
-					secretMetadata, err = response.TokenMetadata()
-					if err != nil {
-						return nil, fmt.Errorf("error getting metadata for secret %q from %q: %w", path,
-							s.vaultClient.Delegate().Address(), err)
-					}
-				} else {
-					secretMetadata = nil
-				}
-			} else {
+			if !(hasData && hasMetadata) {
 				secretData = response.Data
 				secretMetadata = nil
 			}
@@ -416,25 +407,25 @@ func (s *Syncer) readSecret(secret config.SecretType) ([]briefcase.SimpleSecret,
 			log.Debug().Str("metadata", fmt.Sprintf("%+v", secretMetadata)).Msg("retrieved metadata")
 
 			if v, ok := secretMetadata["version"]; ok {
-				vers, err := strconv.Atoi(v)
+				vers, err := v.(json.Number).Int64()
 				if err != nil {
-					log.Error().Err(err).Str("version", v).Msg("could not convert to integer")
+					log.Error().Err(err).Interface("version", v).Msg("could not convert to integer")
 					return nil, fmt.Errorf("could not convert %q to integer: %w", v, err)
 				}
 				secretVersion = &vers
 			} else {
-				return nil, fmt.Errorf("no version metadata field for secret %q from %q", path, s.vaultClient.Delegate().Address())
+				return nil, fmt.Errorf("no version metadata field for secret %q from %q", path, s.vaultClient.Address())
 			}
 
 			if ts, ok := secretMetadata["created_time"]; ok {
-				parsedTime, err := time.Parse(time.RFC3339Nano, ts)
+				parsedTime, err := time.Parse(time.RFC3339Nano, ts.(string))
 				if err != nil {
 					return nil, fmt.Errorf("unable to parse created_time timestamp %q for secret %q from %q",
-						ts, path, s.vaultClient.Delegate().Address())
+						ts, path, s.vaultClient.Address())
 				}
 				secretCreated = &parsedTime
 			} else {
-				return nil, fmt.Errorf("no created_time field for secret %q from %q", path, s.vaultClient.Delegate().Address())
+				return nil, fmt.Errorf("no created_time field for secret %q from %q", path, s.vaultClient.Address())
 			}
 
 		} else {

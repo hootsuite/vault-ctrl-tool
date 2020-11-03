@@ -2,6 +2,7 @@ package util
 
 import (
 	"errors"
+	"fmt"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 	"time"
@@ -92,53 +93,58 @@ func (f *CliFlags) RunMode() RunMode {
 	return ModeUnknown
 }
 
-func ProcessFlags() (*CliFlags, error) {
+func ProcessFlags(args []string) (*CliFlags, error) {
 	var flags CliFlags
 
-	kingpin.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
-	kingpin.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
-	kingpin.Flag("output-prefix", "Path to prefix to all output files (such as /etc/secrets)").StringVar(&flags.OutputPrefix)
-	kingpin.Flag("input-prefix", "Path to prefix on all files being read; including the config file.").StringVar(&flags.InputPrefix)
-	kingpin.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").StringVar(&flags.ServiceSecretPrefix)
+	app := kingpin.New("vault-ctrl-tool", "A handy tool for interacting with HashiCorp Vault")
 
-	kingpin.Flag("renew-interval", "Interval to renew credentials").Default("9m").DurationVar(&flags.RenewInterval)
-	kingpin.Flag("leases-file", "Full path to briefcase file.").Default("/tmp/vault-leases/vault-ctrl-tool.leases").StringVar(&flags.BriefcaseFilename)
-	kingpin.Flag("shutdown-trigger-file", "When running as a daemon, the presence of this file will cause the daemon to stop").StringVar(&flags.ShutdownTriggerFile)
-	kingpin.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").BoolVar(&flags.PerformOneShot)
+	app.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
+	app.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
+	app.Flag("output-prefix", "Path to prefix to all output files (such as /etc/secrets)").StringVar(&flags.OutputPrefix)
+	app.Flag("input-prefix", "Path to prefix on all files being read; including the config file.").StringVar(&flags.InputPrefix)
+	app.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").StringVar(&flags.ServiceSecretPrefix)
 
-	kingpin.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").BoolVar(&flags.PerformCleanup)
-	kingpin.Flag("revoke", "During --cleanup, revoke the Vault authentication token.").Default("false").BoolVar(&flags.RevokeOnCleanup)
+	app.Flag("renew-interval", "Interval to renew credentials").Default("9m").DurationVar(&flags.RenewInterval)
+	app.Flag("leases-file", "Full path to briefcase file.").Default("/tmp/vault-leases/vault-ctrl-tool.leases").StringVar(&flags.BriefcaseFilename)
+	app.Flag("shutdown-trigger-file", "When running as a daemon, the presence of this file will cause the daemon to stop").StringVar(&flags.ShutdownTriggerFile)
+	app.Flag("one-shot", "Combined with --sidecar, will perform one iteration of work and exit. For crontabs, etc.").Default("false").BoolVar(&flags.PerformOneShot)
+
+	app.Flag("cleanup", "Using the leases file, erase any created output files.").Default("false").BoolVar(&flags.PerformCleanup)
+	app.Flag("revoke", "During --cleanup, revoke the Vault authentication token.").Default("false").BoolVar(&flags.RevokeOnCleanup)
 
 	// Sidecar options
-	kingpin.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").BoolVar(&flags.PerformSidecar)
-	kingpin.Flag("renew-lease-duration", "unused, kept for compatibility").Default("1h").Duration()
-	kingpin.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").StringVar(&flags.VaultTokenArg)
-	kingpin.Flag("token-renewable", "Is the token supplied on the command line renewable?").Default("true").BoolVar(&flags.CliVaultTokenRenewable)
+	app.Flag("sidecar", "Run in side-car mode, refreshing leases as needed.").Default("false").BoolVar(&flags.PerformSidecar)
+	app.Flag("renew-lease-duration", "unused, kept for compatibility").Default("1h").Duration()
+	app.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").StringVar(&flags.VaultTokenArg)
+	app.Flag("token-renewable", "Is the token supplied on the command line renewable?").Default("true").BoolVar(&flags.CliVaultTokenRenewable)
 
 	// Kubernetes Authentication
-	kingpin.Flag("k8s-token-file", "Service account token path").Default("/var/run/secrets/kubernetes.io/serviceaccount/token").StringVar(&flags.ServiceAccountToken)
-	kingpin.Flag("k8s-login-path", "Vault path to authenticate against").Default(os.Getenv("K8S_LOGIN_PATH")).StringVar(&flags.KubernetesLoginPath)
-	kingpin.Flag("k8s-auth-role", "Kubernetes authentication role").StringVar(&flags.KubernetesAuthRole)
+	app.Flag("k8s-token-file", "Service account token path").Default("/var/run/secrets/kubernetes.io/serviceaccount/token").StringVar(&flags.ServiceAccountToken)
+	app.Flag("k8s-login-path", "Vault path to authenticate against").Default(os.Getenv("K8S_LOGIN_PATH")).StringVar(&flags.KubernetesLoginPath)
+	app.Flag("k8s-auth-role", "Kubernetes authentication role").StringVar(&flags.KubernetesAuthRole)
 
 	// EC2 Authentication
-	kingpin.Flag("ec2-auth", "Use EC2 metadata to authenticate to Vault").Default("false").BoolVar(&flags.EC2AuthEnabled)
-	kingpin.Flag("ec2-vault-nonce", "Nonce to use if re-authenticating.").Default("").StringVar(&flags.EC2Nonce)
+	app.Flag("ec2-auth", "Use EC2 metadata to authenticate to Vault").Default("false").BoolVar(&flags.EC2AuthEnabled)
+	app.Flag("ec2-vault-nonce", "Nonce to use if re-authenticating.").Default("").StringVar(&flags.EC2Nonce)
 
 	// IAM Authentication
-	kingpin.Flag("iam-auth-role", "The role used to perform iam authentication").Default("").StringVar(&flags.IAMAuthRole)
-	kingpin.Flag("iam-vault-auth-backend", "The name of the auth backend in Vault to perform iam authentication against. Defaults to `aws`.").Default("aws").StringVar(&flags.IAMVaultAuthBackend)
+	app.Flag("iam-auth-role", "The role used to perform iam authentication").Default("").StringVar(&flags.IAMAuthRole)
+	app.Flag("iam-vault-auth-backend", "The name of the auth backend in Vault to perform iam authentication against. Defaults to `aws`.").Default("aws").StringVar(&flags.IAMVaultAuthBackend)
 
 	// Show version
-	kingpin.Flag("version", "Display build version").Default("false").BoolVar(&flags.ShowVersion)
+	app.Flag("version", "Display build version").Default("false").BoolVar(&flags.ShowVersion)
 
 	// Shared options
-	kingpin.Flag("debug", "Log at debug level").Default("false").BoolVar(&flags.DebugLogLevel)
+	app.Flag("debug", "Log at debug level").Default("false").BoolVar(&flags.DebugLogLevel)
 
 	// Flags for smoothing out edge cases.
-	kingpin.Flag("ignore-non-renewable-auth", "ignored; kept for compatibility").Default("false").Bool()
-	kingpin.Flag("never-scrub", "ignored; kept for compatibility").Default("false").Bool()
+	app.Flag("ignore-non-renewable-auth", "ignored; kept for compatibility").Default("false").Bool()
+	app.Flag("never-scrub", "ignored; kept for compatibility").Default("false").Bool()
 
-	kingpin.Parse()
+	_, err := app.Parse(args)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse arguments: %w", err)
+	}
 
 	if flags.EC2AuthEnabled && flags.IAMAuthRole != "" {
 		return nil, errors.New("specify exactly one of --ec2-auth or --iam-auth-role")

@@ -39,7 +39,7 @@ type vaultTokenManager struct {
 }
 
 func NewVaultToken(briefcase *briefcase.Briefcase, vaultClient vaultclient.VaultClient, vaultTokenCliArg string, tokenRenewableCliArg bool) VaultToken {
-	log := zlog.With().Str("vaultAddr", vaultClient.Delegate().Address()).Logger()
+	log := zlog.With().Str("vaultAddr", vaultClient.Address()).Logger()
 
 	return &vaultTokenManager{
 		log:                  log,

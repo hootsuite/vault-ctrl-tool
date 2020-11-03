@@ -154,7 +154,7 @@ func TestResetBriefcase(t *testing.T) {
 		"b": true,
 	}
 
-	sversioned := map[string]int{
+	sversioned := map[string]int64{
 		"a": 3,
 		"b": 8,
 	}

@@ -40,7 +40,7 @@ type Authenticator interface {
 }
 
 func NewAuthenticator(client VaultClient, cliFlags util.CliFlags) (Authenticator, error) {
-	log := zlog.With().Str("vaultAddr", client.Delegate().Address()).Logger()
+	log := zlog.With().Str("vaultAddr", client.Address()).Logger()
 
 	shared := authenticator{
 		log:         log,

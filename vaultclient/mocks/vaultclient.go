@@ -123,3 +123,29 @@ func (mr *MockVaultClientMockRecorder) ServiceSecretPrefix(configVersion interfa
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceSecretPrefix", reflect.TypeOf((*MockVaultClient)(nil).ServiceSecretPrefix), configVersion)
 }
+
+// Address mocks base method
+func (m *MockVaultClient) Address() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Address")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Address indicates an expected call of Address
+func (mr *MockVaultClientMockRecorder) Address() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Address", reflect.TypeOf((*MockVaultClient)(nil).Address))
+}
+
+// SetToken mocks base method
+func (m *MockVaultClient) SetToken(token string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetToken", token)
+}
+
+// SetToken indicates an expected call of SetToken
+func (mr *MockVaultClientMockRecorder) SetToken(token interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToken", reflect.TypeOf((*MockVaultClient)(nil).SetToken), token)
+}

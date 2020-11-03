@@ -2,44 +2,77 @@ package config
 
 import (
 	"io/ioutil"
-	"os"
 	"testing"
 )
 
-func TestEmptyFile(t *testing.T) {
-	filename := mkConfig(t, "")
-	defer os.Remove(filename)
+var validConfigs = map[string]string{
+	"Empty File": ``,
+	"Only with Version 2": `---
+version: 2`,
+}
 
-	cfg, err := ReadConfig(filename, "", "")
+var invalidConfigs = map[string]string{
+	"Bare word": `kapow`,
+	"Missing secret path": `
+---
+version: 3
+secrets:
+ - output: path/to/file
+   key: some-key
+`,
+	"Missing key in secret": `
+---
+version: 3
+secrets:
+  - path: path/to/secret
+    output: path/to/file
+`,
+	"Missing fields for version scoped secret": `---
+version: 1
+secrets:
+  - key: ex
+    path: path/to/secret
+    lifetime: version
+`,
+	"Output specified for version scoped secret": `---
+version: 1
+secrets:
+  - key: ex
+    output: path/to/file
+    path: path/to/secret
+    lifetime: version
+    fields:
+     - name: api_key
+       output: path/to/file
+`,
+}
 
-	if err != nil {
-		t.Fatalf("empty files must be ok, got error: %v", err)
-	}
-
-	if !cfg.VaultConfig.isEmpty() {
-		t.Fatalf("empty files must be considered empty by isEmpty")
+func TestValidConfigs(t *testing.T) {
+	for k, v := range validConfigs {
+		t.Run(k, func(t *testing.T) {
+			filename := mkConfig(t, v)
+			_, err := ReadConfig(filename, "", "")
+			if err != nil {
+				t.Fatalf("this config must be okay, got error: %v", err)
+			}
+		})
 	}
 }
 
-func TestEmptyV2(t *testing.T) {
-	filename := mkConfig(t, `---
-version: 2`)
-	defer os.Remove(filename)
-
-	cfg, err := ReadConfig(filename, "", "")
-
-	if err != nil {
-		t.Fatalf("empty files must be ok, got error: %v", err)
+func TestInvalidConfigs(t *testing.T) {
+	for k, v := range invalidConfigs {
+		t.Run(k, func(t *testing.T) {
+			filename := mkConfig(t, v)
+			_, err := ReadConfig(filename, "", "")
+			if err == nil {
+				t.Fatal("this config must generate an error")
+			}
+		})
 	}
-
-	if !cfg.VaultConfig.isEmpty() {
-		t.Fatalf("empty files must be considered empty by isEmpty")
-	}
-
 }
 
 func mkConfig(t *testing.T, body string) string {
-	f, err := ioutil.TempFile("", "config_test_*")
+	f, err := ioutil.TempFile(t.TempDir(), "config_test_*")
 
 	if err != nil {
 		t.Fatalf("could not make temp file: %v", err)

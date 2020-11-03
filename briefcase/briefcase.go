@@ -26,7 +26,7 @@ type Briefcase struct {
 	StaticTemplates        map[string]bool                `json:"static_templates,omitempty"`
 	TokenScopedSecrets     map[string]bool                `json:"tokenscoped_secrets,omitempty"`
 	StaticScopedSecrets    map[string]bool                `json:"static_secrets,omitempty"`
-	VersionScopedSecrets   map[string]int                 `json:"versioned_secrets,omitempty"`
+	VersionScopedSecrets   map[string]int64               `json:"versioned_secrets,omitempty"`
 	TokenScopedComposites  map[string]bool                `json:"tokenscoped_composites,omitempty"`
 	StaticScopedComposites map[string]bool                `json:"static_composites,omitempty"`
 
@@ -41,7 +41,7 @@ type SimpleSecret struct {
 	Key         string
 	Field       string
 	Value       interface{}
-	Version     *int
+	Version     *int64
 	CreatedTime *time.Time
 }
 
@@ -72,7 +72,7 @@ func NewBriefcase() *Briefcase {
 		StaticTemplates:        make(map[string]bool),
 		TokenScopedSecrets:     make(map[string]bool),
 		StaticScopedSecrets:    make(map[string]bool),
-		VersionScopedSecrets:   make(map[string]int),
+		VersionScopedSecrets:   make(map[string]int64),
 		TokenScopedComposites:  make(map[string]bool),
 		StaticScopedComposites: make(map[string]bool),
 		log:                    zlog.Logger,

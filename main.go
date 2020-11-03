@@ -29,7 +29,7 @@ func setupLogging(debug bool) {
 }
 
 func main() {
-	flags, err := util.ProcessFlags()
+	flags, err := util.ProcessFlags(os.Args[1:])
 	if err != nil {
 		panic(err)
 	}
