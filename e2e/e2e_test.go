@@ -1,4 +1,4 @@
-package syncer
+package e2e
 
 import (
 	"context"
@@ -7,10 +7,12 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	mtrics "github.com/hootsuite/vault-ctrl-tool/v2/metrics"
+	"github.com/hootsuite/vault-ctrl-tool/v2/syncer"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	mock_vaultclient "github.com/hootsuite/vault-ctrl-tool/v2/vaultclient/mocks"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	zlog "github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
@@ -30,7 +32,7 @@ const vaultTokenJSON = `{
     "creation_ttl": 32400,
     "display_name": "unit-test-token",
     "entity_id": "07ef9c85-9f14-1272-eb56-92b7bfd21500",
-    "expire_time": "2020-11-03T21:00:28.797810827-08:00",
+    "expire_time": "2040-11-03T21:00:28.797810827-08:00",
     "explicit_max_ttl": 0,
     "id": "unit-test-token",
     "issue_time": "2020-11-03T12:00:28.797823501-08:00",
@@ -54,7 +56,16 @@ func TestSyncWithEmptyConfig(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 
-	cfg := &config.ControlToolConfig{}
+	log := zlog.Output(zerolog.ConsoleWriter{Out: os.Stdout}).Level(zerolog.DebugLevel)
+	workDir := t.TempDir()
+
+	cfg, err := config.ReadConfig(log, []byte(`
+---
+version: 3
+`), workDir, workDir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	vaultClient := mock_vaultclient.NewMockVaultClient(ctrl)
 	vaultClient.EXPECT().Address().Return("unit-tests").AnyTimes()
 
@@ -66,9 +77,10 @@ func TestSyncWithEmptyConfig(t *testing.T) {
 	vaultClient.EXPECT().VerifyVaultToken(gomock.Any()).Return(&secret, nil).AnyTimes()
 	vaultClient.EXPECT().SetToken(gomock.Any()).AnyTimes()
 
-	bcase := briefcase.NewBriefcase()
+	metrics := mtrics.NewMetrics()
 
-	workDir := t.TempDir()
+	bcase := briefcase.NewBriefcase(metrics)
+
 	cliFlags, err := util.ProcessFlags([]string{
 		"--init",
 		"--output-prefix", workDir,
@@ -81,10 +93,14 @@ func TestSyncWithEmptyConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := NewSyncer(log.Output(zerolog.ConsoleWriter{Out: os.Stdout}).Level(zerolog.DebugLevel),
-		cfg, vaultClient, bcase)
+	s := syncer.NewSyncer(log, cfg, vaultClient, bcase, metrics)
 
-	err = s.PerformSync(context.TODO(), time.Now().AddDate(1, 0, 0), *cliFlags)
+	err = s.PerformSync(context.Background(), time.Now().AddDate(1, 0, 0), *cliFlags)
 
 	assert.NoError(t, err)
+	assert.Equal(t, 1, metrics.Counter(mtrics.BriefcaseReset))
+	assert.Equal(t, 0, metrics.Counter(mtrics.VaultTokenWritten))
+	assert.Equal(t, 0, metrics.Counter(mtrics.VaultTokenRefreshed))
+	assert.Equal(t, 0, metrics.Counter(mtrics.SecretUpdates))
+
 }

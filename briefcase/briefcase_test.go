@@ -3,6 +3,7 @@ package briefcase
 import (
 	"context"
 	"encoding/json"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	testing2 "k8s.io/utils/clock/testing"
@@ -61,7 +62,7 @@ func TestSavePermissions(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	filename := path.Join(tempDir, "briefcase")
 
-	emptyBriefcase := NewBriefcase()
+	emptyBriefcase := NewBriefcase(nil)
 	err := emptyBriefcase.SaveAs(filename)
 	assert.NoError(t, err, "must be able to save empty briefcase. filename=%q", filename)
 
@@ -77,11 +78,11 @@ func TestSaveAndLoadEmpty(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	filename := path.Join(tempDir, "briefcase")
 
-	emptyBriefcase := NewBriefcase()
+	emptyBriefcase := NewBriefcase(nil)
 	err := emptyBriefcase.SaveAs(filename)
 	assert.NoError(t, err, "must be able to save empty briefcase. filename=%q", filename)
 
-	loadedBriefcase, err := LoadBriefcase(filename)
+	loadedBriefcase, err := LoadBriefcase(filename, nil)
 	assert.NoError(t, err, "must be able to load empty briefcase. filename=%q", filename)
 
 	assert.EqualValues(t, emptyBriefcase, loadedBriefcase, "empty briefcase and loaded empty briefcase must be the same")
@@ -92,14 +93,14 @@ func TestSaveAndLoadEnrolledToken(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	filename := path.Join(tempDir, "briefcase")
 
-	bc := NewBriefcase()
+	bc := NewBriefcase(nil)
 
 	token := myToken(t)
 
 	assert.NoError(t, bc.EnrollVaultToken(context.Background(), util.NewWrappedToken(&token, true)), "must be able to enroll example token in briefcase")
 	assert.NoError(t, bc.SaveAs(filename), "must be able to save briefcase")
 
-	loadedBriefcase, err := LoadBriefcase(filename)
+	loadedBriefcase, err := LoadBriefcase(filename, nil)
 	assert.NoError(t, err, "must be able to reload briefcase")
 
 	assert.False(t, loadedBriefcase.ShouldRefreshVaultToken(context.TODO()), "must not need to refresh a token with a TTL")
@@ -108,7 +109,7 @@ func TestSaveAndLoadEnrolledToken(t *testing.T) {
 }
 
 func TestExpiringTokenNeedsRefresh(t *testing.T) {
-	bc := NewBriefcase()
+	bc := NewBriefcase(nil)
 	token := myToken(t)
 
 	token.Data["ttl"] = 299
@@ -118,7 +119,7 @@ func TestExpiringTokenNeedsRefresh(t *testing.T) {
 }
 
 func TestExpiringNonRenewableTokenNeverNeedsRefresh(t *testing.T) {
-	bc := NewBriefcase()
+	bc := NewBriefcase(nil)
 	token := myToken(t)
 
 	token.Data["ttl"] = 1
@@ -128,7 +129,7 @@ func TestExpiringNonRenewableTokenNeverNeedsRefresh(t *testing.T) {
 }
 
 func TestExpiredNonRenewableTokenNeverNeedsRefresh(t *testing.T) {
-	bc := NewBriefcase()
+	bc := NewBriefcase(nil)
 	token := myToken(t)
 
 	fakeClock := testing2.NewFakeClock(time.Now())
@@ -141,7 +142,7 @@ func TestExpiredNonRenewableTokenNeverNeedsRefresh(t *testing.T) {
 }
 
 func TestNilTokenEnrollment(t *testing.T) {
-	bc := NewBriefcase()
+	bc := NewBriefcase(nil)
 
 	assert.NotPanics(t, func() {
 		assert.Error(t, bc.EnrollVaultToken(context.TODO(), nil), "trying to enroll a nil token must return an error")
@@ -168,7 +169,8 @@ func TestResetBriefcase(t *testing.T) {
 		"baz": {},
 	}
 
-	big := NewBriefcase()
+	mtrcs := metrics.NewMetrics()
+	big := NewBriefcase(mtrcs)
 	big.AWSCredentialLeases = aws
 	big.SSHCertificates = ssh
 	big.TokenScopedTemplates = s
@@ -179,7 +181,7 @@ func TestResetBriefcase(t *testing.T) {
 	big.StaticScopedComposites = s
 	big.VersionScopedSecrets = sversioned
 
-	small := NewBriefcase()
+	small := NewBriefcase(mtrcs)
 	small.AWSCredentialLeases = aws
 	small.SSHCertificates = ssh
 	small.StaticTemplates = s
@@ -189,4 +191,5 @@ func TestResetBriefcase(t *testing.T) {
 	resetBig := big.ResetBriefcase()
 
 	assert.EqualValues(t, small, resetBig, "resetting a briefcase should leave non-token scoped data")
+	assert.Equal(t, 1, mtrcs.Counter(metrics.BriefcaseReset))
 }

@@ -111,30 +111,13 @@ type ControlToolConfig struct {
 	Composites  map[string]*CompositeSecretFile
 }
 
-func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
-	if configFile == "" {
-		return nil, fmt.Errorf("a --config file is required to be specified")
-	}
-
-	absConfigFile := util.AbsolutePath(inputPrefix, configFile)
-
-	log := zlog.With().Str("cfg", absConfigFile).Logger()
-	log.Debug().Msg("reading config file")
-
-	yamlFile, err := ioutil.ReadFile(absConfigFile)
-
-	if err != nil {
-		log.Error().Err(err).Msg("could not read config file")
-		return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
-	}
+func ReadConfig(log zerolog.Logger, config []byte, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
 
 	var current VaultConfig
 
-	err = yaml.Unmarshal(yamlFile, &current)
-
-	if err != nil {
+	if err := yaml.Unmarshal(config, &current); err != nil {
 		log.Error().Err(err).Msg("could not unmarshal config file")
-		return nil, fmt.Errorf("could not unmarshal config file %q: %w", absConfigFile, err)
+		return nil, fmt.Errorf("could not unmarshal config file: %w", err)
 	}
 
 	current.log = log
@@ -165,6 +148,26 @@ func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlTo
 		Templates:   templates,
 		Composites:  composites,
 	}, nil
+}
+func ReadConfigFile(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
+	if configFile == "" {
+		return nil, fmt.Errorf("a --config file is required to be specified")
+	}
+
+	absConfigFile := util.AbsolutePath(inputPrefix, configFile)
+
+	log := zlog.With().Str("cfg", absConfigFile).Logger()
+	log.Debug().Msg("reading config file")
+
+	yamlFile, err := ioutil.ReadFile(absConfigFile)
+
+	if err != nil {
+		log.Error().Err(err).Msg("could not read config file")
+		return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
+	}
+
+	return ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+
 }
 
 // createCompositeSecrets brings an obscure feature of v1 where multiple secret stanzas could

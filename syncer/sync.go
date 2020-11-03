@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/hashicorp/vault/api"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,24 +28,26 @@ type Syncer struct {
 	config      *config.ControlToolConfig
 	vaultClient vaultclient.VaultClient
 	briefcase   *briefcase.Briefcase
+	metrics     *metrics.Metrics
 }
 
-func NewSyncer(log zerolog.Logger, cfg *config.ControlToolConfig, vaultClient vaultclient.VaultClient, briefcase *briefcase.Briefcase) *Syncer {
+func NewSyncer(log zerolog.Logger, cfg *config.ControlToolConfig, vaultClient vaultclient.VaultClient, briefcase *briefcase.Briefcase, metrics *metrics.Metrics) *Syncer {
 	return &Syncer{
 		log:         log,
 		config:      cfg,
 		vaultClient: vaultClient,
 		briefcase:   briefcase,
+		metrics:     metrics,
 	}
 }
 
-func SetupSyncer(flags util.CliFlags, bc *briefcase.Briefcase) (*Syncer, error) {
+func SetupSyncer(flags util.CliFlags, bc *briefcase.Briefcase, m *metrics.Metrics) (*Syncer, error) {
 	log, cfg, vaultClient, err := configureSyncerDependencies(flags)
 	if err != nil {
 		return nil, err
 	}
 
-	syncer := NewSyncer(log, cfg, vaultClient, bc)
+	syncer := NewSyncer(log, cfg, vaultClient, bc, m)
 
 	return syncer, nil
 }
@@ -53,7 +56,7 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 
 	log := zlog.With().Str("cfg", flags.ConfigFile).Logger()
 
-	cfg, err := config.ReadConfig(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
+	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
 	if err != nil {
 		return log, nil, nil, err
 	}
@@ -83,7 +86,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 		s.log.Debug().Msg("briefcase token differs from current token, resetting briefcase")
 		s.briefcase = s.briefcase.ResetBriefcase()
 		if s.config.VaultConfig.VaultToken.Output != "" {
-			if err := secrets.WriteVaultToken(s.config.VaultConfig.VaultToken, vaultToken.TokenID()); err != nil {
+			if err := secrets.WriteVaultToken(s.metrics, s.config.VaultConfig.VaultToken, vaultToken.TokenID()); err != nil {
 				s.log.Error().Err(err).Msg("could not write vault token")
 				return err
 			}
@@ -100,6 +103,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 			s.log.Error().Err(err).Msg("could not refresh vault token")
 			return err
 		}
+		s.metrics.Increment(metrics.VaultTokenRefreshed)
 
 		if err := s.briefcase.EnrollVaultToken(ctx, util.NewWrappedToken(secret, s.briefcase.AuthTokenLease.Renewable)); err != nil {
 			return err
@@ -232,6 +236,7 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 		}
 	}
 
+	s.metrics.IncrementBy(metrics.SecretUpdates, updates)
 	s.log.Info().Int("updates", updates).Msg("done comparing configuration against briefcase")
 	return nil
 }

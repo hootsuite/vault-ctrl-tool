@@ -61,11 +61,9 @@ func TestEmptyVaultToken(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	vaultClient := mock_vaultclient.NewMockVaultClient(ctrl)
-	newAPIClient, err := api.NewClient(nil)
-	assert.NoError(t, err, "could not create default hashicorp/vault/api client")
-	vaultClient.EXPECT().Delegate().Return(newAPIClient)
+	vaultClient.EXPECT().Address().Return("unit-test")
 
-	bc := briefcase.NewBriefcase()
+	bc := briefcase.NewBriefcase(nil)
 	vaultToken := NewVaultToken(bc, vaultClient, "", true)
 
 	assert.Equal(t, "", vaultToken.Accessor(), "freshly created vault token must not have a token in it")
@@ -76,15 +74,13 @@ func TestGetAndSetVaultToken(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	vaultClient := mock_vaultclient.NewMockVaultClient(ctrl)
-	newAPIClient, err := api.NewClient(nil)
-	assert.NoError(t, err, "could not create default hashicorp/vault/api client")
-	vaultClient.EXPECT().Delegate().Return(newAPIClient)
+	vaultClient.EXPECT().Address().Return("unit-test")
 
-	bc := briefcase.NewBriefcase()
+	bc := briefcase.NewBriefcase(nil)
 	vaultToken := NewVaultToken(bc, vaultClient, "", true)
 
 	token := makeToken(t, "token-1")
-	err = vaultToken.Set(util.NewWrappedToken(&token, true))
+	err := vaultToken.Set(util.NewWrappedToken(&token, true))
 	assert.NoError(t, err, "must be able to set token")
 
 	assert.Equal(t, "accessor:token-1", vaultToken.Accessor(), "accessor must match value in token")
@@ -96,19 +92,17 @@ func TestVerifyBriefcaseIfSet(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	vaultClient := mock_vaultclient.NewMockVaultClient(ctrl)
-	newAPIClient, err := api.NewClient(nil)
-	assert.NoError(t, err, "could not create default hashicorp/vault/api client")
-	vaultClient.EXPECT().Delegate().Return(newAPIClient)
+	vaultClient.EXPECT().Address().Return("unit-test")
 
-	bc := briefcase.NewBriefcase()
+	bc := briefcase.NewBriefcase(nil)
 	vaultToken := NewVaultToken(bc, vaultClient, "", true)
 
 	token := makeToken(t, "token-1")
-	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&token, true)), "must be able to enroll example vault token in briefcase")
+	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&token, true)), "must be able to enroll example vault token in briefcase")
 
 	vaultClient.EXPECT().VerifyVaultToken("token-1").Return(&token, nil)
 
-	err = vaultToken.CheckAndRefresh()
+	err := vaultToken.CheckAndRefresh()
 	assert.NoError(t, err, "must accept valid briefcase token if set")
 
 	assert.Equal(t, "accessor:token-1", vaultToken.Accessor(), "accessor must match value in token")
@@ -119,13 +113,11 @@ func TestBadBriefcaseGoodCLI(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	vaultClient := mock_vaultclient.NewMockVaultClient(ctrl)
-	newAPIClient, err := api.NewClient(nil)
-	assert.NoError(t, err, "could not create default hashicorp/vault/api client")
-	vaultClient.EXPECT().Delegate().Return(newAPIClient)
+	vaultClient.EXPECT().Address().Return("unit-test")
 
-	bc := briefcase.NewBriefcase()
+	bc := briefcase.NewBriefcase(nil)
 	briefcaseToken := makeToken(t, "token-1")
-	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&briefcaseToken, true)), "must be able to enroll example vault token in briefcase")
+	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&briefcaseToken, true)), "must be able to enroll example vault token in briefcase")
 
 	cliToken := makeToken(t, "token-2")
 	vaultToken := NewVaultToken(bc, vaultClient, "token-2", true)
@@ -138,7 +130,7 @@ func TestBadBriefcaseGoodCLI(t *testing.T) {
 			return nil, errors.New("any error goes here")
 		}).Times(2)
 
-	err = vaultToken.CheckAndRefresh()
+	err := vaultToken.CheckAndRefresh()
 	assert.NoError(t, err, "must accept valid CLI token if set")
 
 	assert.Equal(t, "token-2", vaultToken.TokenID(), "token must match value in token")
@@ -151,13 +143,11 @@ func TestVerifySequence(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	vaultClient := mock_vaultclient.NewMockVaultClient(ctrl)
-	newAPIClient, err := api.NewClient(nil)
-	assert.NoError(t, err, "could not create default hashicorp/vault/api client")
-	vaultClient.EXPECT().Delegate().Return(newAPIClient)
+	vaultClient.EXPECT().Address().Return("unit-test")
 
-	bc := briefcase.NewBriefcase()
+	bc := briefcase.NewBriefcase(nil)
 	briefcaseToken := makeToken(t, "token-1")
-	assert.NoError(t, err, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&briefcaseToken, true)), "must be able to enroll example vault token in briefcase")
+	assert.NoError(t, bc.EnrollVaultToken(context.TODO(), util.NewWrappedToken(&briefcaseToken, true)), "must be able to enroll example vault token in briefcase")
 
 	vaultToken := NewVaultToken(bc, vaultClient, "token-2", true)
 	os.Setenv("VAULT_TOKEN", "token-3")
@@ -168,7 +158,7 @@ func TestVerifySequence(t *testing.T) {
 		vaultClient.EXPECT().VerifyVaultToken("token-3").Return(nil, errors.New("some error 3")),
 	)
 
-	err = vaultToken.CheckAndRefresh()
+	err := vaultToken.CheckAndRefresh()
 	assert.True(t, errors.Is(err, ErrNoValidVaultTokenAvailable), "CheckAndReturn must return ErrNoValidVaultTokenAvailable if there isn't")
 }
 

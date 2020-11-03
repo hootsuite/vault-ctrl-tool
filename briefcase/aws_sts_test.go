@@ -49,7 +49,7 @@ func TestAWSCredentialExpireCheck(t *testing.T) {
 
 	ctx := clock.Set(context.Background(), testing2.NewFakeClock(testTime))
 
-	bc := NewBriefcase()
+	bc := NewBriefcase(nil)
 	bc.EnrollAWSCredential(ctx, &awsCreds, awsConfig)
 
 	assert.False(t, bc.AWSCredentialExpiresBefore(awsConfig, testTime), "freshly enrolled STS token must not need refreshing")

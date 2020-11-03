@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"io/ioutil"
 	"time"
 
@@ -33,7 +34,8 @@ type Briefcase struct {
 	// cache of secrets, not persisted
 	secretCache map[util.SecretLifetime][]SimpleSecret
 
-	log zerolog.Logger
+	log     zerolog.Logger
+	metrics *metrics.Metrics
 }
 
 // SimpleSecret is a field in a secret, but also contains some important information about the secret itself.
@@ -64,7 +66,7 @@ type leasedAWSCredential struct {
 }
 
 // NewBriefcase creates an empty briefcase.
-func NewBriefcase() *Briefcase {
+func NewBriefcase(mtrics *metrics.Metrics) *Briefcase {
 	return &Briefcase{
 		AWSCredentialLeases:    make(map[string]leasedAWSCredential),
 		SSHCertificates:        make(map[string]sshCert),
@@ -76,6 +78,7 @@ func NewBriefcase() *Briefcase {
 		TokenScopedComposites:  make(map[string]bool),
 		StaticScopedComposites: make(map[string]bool),
 		log:                    zlog.Logger,
+		metrics:                mtrics,
 		secretCache:            make(map[util.SecretLifetime][]SimpleSecret),
 	}
 }
@@ -84,7 +87,10 @@ func NewBriefcase() *Briefcase {
 // that weren't "static" will likely soon expire and disappear. By resetting the briefcase, it will cause
 // all the non-static secrets to be recreated.
 func (b *Briefcase) ResetBriefcase() *Briefcase {
-	newBriefcase := NewBriefcase()
+
+	b.metrics.Increment(metrics.BriefcaseReset)
+
+	newBriefcase := NewBriefcase(b.metrics)
 	// AWS Credentials is done through sts:AssumeRole which currently has no reasonable
 	// revocation mechanism, so credentials remain valid across tokens.
 	newBriefcase.AWSCredentialLeases = b.AWSCredentialLeases
@@ -100,14 +106,14 @@ func (b *Briefcase) ResetBriefcase() *Briefcase {
 	return newBriefcase
 }
 
-func LoadBriefcase(filename string) (*Briefcase, error) {
+func LoadBriefcase(filename string, mtrics *metrics.Metrics) (*Briefcase, error) {
 	zlog.Info().Str("filename", filename).Msg("reading briefcase")
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	bc := NewBriefcase()
+	bc := NewBriefcase(mtrics)
 	err = json.Unmarshal(bytes, bc)
 	if err != nil {
 		return nil, err
