@@ -219,14 +219,19 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) []error 
 	var tidyTpls []TemplateType
 
 	for _, tpl := range cfg.Templates {
-		if tpl.Lifetime == "" && cfg.ConfigVersion < 3 {
-			tpl.Lifetime = util.LifetimeStatic
-		}
 
 		if tpl.Input == "" {
 			errs = append(errs, fmt.Errorf("there is a template stanza missing a input file in the configuration file ('input')"))
 		} else {
 			tpl.Input = util.AbsolutePath(inputPrefix, tpl.Input)
+		}
+
+		if tpl.Lifetime != "" && cfg.ConfigVersion < 3 {
+			errs = append(errs, fmt.Errorf("template %q - lifetime is only supported when config version is at least 3", tpl.Input))
+		}
+
+		if tpl.Lifetime == "" && cfg.ConfigVersion < 3 {
+			tpl.Lifetime = util.LifetimeStatic
 		}
 
 		if tpl.Lifetime == util.LifetimeVersion {
@@ -262,6 +267,10 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) []error 
 		if secret.Path == "" {
 			errs = append(errs, fmt.Errorf("secret %q - no Vault path specified for secret in configuration file", secret.Key))
 			continue
+		}
+
+		if secret.Lifetime != "" && cfg.ConfigVersion < 3 {
+			errs = append(errs, fmt.Errorf("secret %q - uses a lifetime, but config version is less than 3", secret.Key))
 		}
 
 		if secret.Lifetime == "" && cfg.ConfigVersion < 3 {

@@ -110,7 +110,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 		}
 	}
 
-	err = s.compareConfigToBriefcase(nextSync)
+	err = s.compareConfigToBriefcase(ctx, nextSync)
 	if err != nil {
 		s.log.Error().Err(err).Msg("could not compare config file against briefcase")
 		return err
@@ -127,7 +127,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 // compareConfigToBriefcase does what it says on the tin. Given the list of secrets expected to exist (listed in the config),
 // compare that to the secrets that are being tracked in the briefcase. If they need to be refreshed, then refresh them
 // and update the briefcase.
-func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
+func (s *Syncer) compareConfigToBriefcase(ctx context.Context, nextSync time.Time) error {
 	updates := 0
 
 	if err := s.compareAWS(&updates, nextSync); err != nil {
@@ -138,78 +138,12 @@ func (s *Syncer) compareConfigToBriefcase(nextSync time.Time) error {
 		return err
 	}
 
-	if err := s.compareTemplates(&updates, nextSync); err != nil {
+	if err := s.compareTemplates(&updates); err != nil {
 		return err
 	}
 
-	for _, secret := range s.config.VaultConfig.Secrets {
-		log := s.log.With().Interface("secretCfg", secret).Logger()
-		log.Debug().Msg("checking secret")
-
-		switch secret.Lifetime {
-		// Secrets with "version" lifetime are automatically updated when the secret is updated in Vault. This is
-		// different than Token / Static lifetimes, so the code is a bit messier. At some point there could
-		// be a desire for version scoped templates/composites/etc/etc at which point it becomes worthwhile
-		// to rearrange this code.
-		case util.LifetimeVersion:
-
-			simpleSecrets, err := s.readSecret(secret)
-			if err != nil {
-				return err
-			}
-
-			if len(simpleSecrets) > 0 {
-				ss := simpleSecrets[0]
-				if ss.Version == nil {
-					return fmt.Errorf("no version number associated with secret %q and lifetime is %q",
-						secret.Key, util.LifetimeVersion)
-				}
-
-				briefcaseVersion := s.briefcase.VersionScopedSecrets[secret.Path]
-				if briefcaseVersion == 0 {
-					if err := secrets.WriteSecret(secret, simpleSecrets); err != nil {
-						return fmt.Errorf("could not write secret %q: %w", secret.Path, err)
-					}
-					s.briefcase.VersionScopedSecrets[secret.Path] = *ss.Version
-				}
-			} else {
-				log.Warn().Msg("no fields returned for secret")
-			}
-		case util.LifetimeToken, util.LifetimeStatic:
-			if s.briefcase.ShouldRefreshSecret(secret) {
-				updates++
-				log.Debug().Msg("refreshing secret")
-
-				if secret.Lifetime == util.LifetimeToken {
-					if err := s.cacheSecrets(util.LifetimeToken); err != nil {
-						return err
-					}
-				}
-
-				if err := s.cacheSecrets(util.LifetimeStatic); err != nil {
-					return err
-				}
-
-				var kvSecrets []briefcase.SimpleSecret
-
-				// make a copy
-				kvSecrets = append(kvSecrets, s.briefcase.GetSecrets(util.LifetimeStatic)...)
-				kvSecrets = append(kvSecrets, s.briefcase.GetSecrets(util.LifetimeVersion)...)
-
-				if secret.Lifetime == util.LifetimeToken {
-					kvSecrets = append(kvSecrets, s.briefcase.GetSecrets(util.LifetimeToken)...)
-				}
-
-				if err := secrets.WriteSecret(secret, kvSecrets); err != nil {
-					log.Error().Err(err).Msg("failed to write secret")
-					return err
-				}
-				s.briefcase.EnrollSecret(secret)
-			}
-		default:
-			log.Error().Str("lifetime", string(secret.Lifetime)).Msg("missing code to sync secrets with lifetime")
-		}
-
+	if err := s.compareSecrets(ctx, &updates); err != nil {
+		return err
 	}
 
 	for _, composite := range s.config.Composites {
@@ -360,11 +294,11 @@ func (s *Syncer) readSecret(secret config.SecretType) ([]briefcase.SimpleSecret,
 
 	if secret.PinnedVersion != nil {
 		log.Debug().Int("pinnedVersion", *secret.PinnedVersion).Msg("fetching specific version")
-		response, err = s.vaultClient.Delegate().Logical().ReadWithData(path, map[string][]string{
+		response, err = s.vaultClient.ReadWithData(path, map[string][]string{
 			"version": {strconv.Itoa(*secret.PinnedVersion)},
 		})
 	} else {
-		response, err = s.vaultClient.Delegate().Logical().Read(path)
+		response, err = s.vaultClient.Read(path)
 	}
 
 	if err != nil {
@@ -411,8 +345,19 @@ func (s *Syncer) readSecret(secret config.SecretType) ([]briefcase.SimpleSecret,
 		if secretMetadata != nil {
 			log.Debug().Str("metadata", fmt.Sprintf("%+v", secretMetadata)).Msg("retrieved metadata")
 
+			// I've had this value come back as both json.Number, and a float.. *shrug*
 			if v, ok := secretMetadata["version"]; ok {
-				vers, err := v.(json.Number).Int64()
+				var vers int64
+				var err error
+				switch val := v.(type) {
+				case json.Number:
+					vers, err = val.Int64()
+				case float64:
+					vers = int64(val)
+				default:
+					log.Warn().Str("type", fmt.Sprintf("%T", v)).Msg("unknown type for version metadata")
+					vers, err = strconv.ParseInt(fmt.Sprintf("%v", v), 10, 64)
+				}
 				if err != nil {
 					log.Error().Err(err).Interface("version", v).Msg("could not convert to integer")
 					return nil, fmt.Errorf("could not convert %q to integer: %w", v, err)

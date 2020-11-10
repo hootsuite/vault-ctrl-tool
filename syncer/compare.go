@@ -2,13 +2,102 @@ package syncer
 
 import (
 	"context"
+	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
 	"github.com/hootsuite/vault-ctrl-tool/v2/secrets"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	"time"
 )
 
-func (s *Syncer) compareTemplates(updates *int, nextSync time.Time) error {
+func (s *Syncer) compareSecrets(ctx context.Context, updates *int) error {
+	for _, secret := range s.config.VaultConfig.Secrets {
+		log := s.log.With().Interface("secretCfg", secret).Logger()
+		log.Debug().Msg("checking secret")
 
+		switch secret.Lifetime {
+		// Secrets with "version" lifetime are automatically updated when the secret is updated in Vault. This is
+		// different than Token / Static lifetimes, so the code is a bit messier. At some point there could
+		// be a desire for version scoped templates/composites/etc/etc at which point it becomes worthwhile
+		// to rearrange this code.
+		case util.LifetimeVersion:
+
+			simpleSecrets, err := s.readSecret(secret)
+			if err != nil {
+				return err
+			}
+
+			if len(simpleSecrets) > 0 {
+				ss := simpleSecrets[0]
+				if ss.Version == nil {
+					return fmt.Errorf("no version number associated with secret %q and lifetime is %q",
+						secret.Key, util.LifetimeVersion)
+				}
+
+				briefcaseVersion := s.briefcase.VersionScopedSecrets[secret.Path]
+
+				log.Debug().Int64("secretVersion", *ss.Version).
+					Int64("briefcaseSecretVersion", briefcaseVersion).
+					Time("secretTimestamp", *ss.CreatedTime).
+					Time("now", clock.Now(ctx)).
+					Msg("comparing briefcase version of secret to current version")
+
+				if briefcaseVersion == 0 ||
+					(briefcaseVersion < *ss.Version &&
+						ss.CreatedTime.Add(30*time.Second).Before(clock.Now(ctx))) {
+
+					count, err := secrets.WriteSecretFields(secret, simpleSecrets)
+					if err != nil {
+						return fmt.Errorf("could not write secret %q: %w", secret.Path, err)
+					}
+					*updates += count
+					s.briefcase.VersionScopedSecrets[secret.Path] = *ss.Version
+				} else {
+					log.Debug().Msg("not updating secret")
+				}
+			} else {
+				log.Warn().Msg("no fields returned for secret")
+			}
+		case util.LifetimeToken, util.LifetimeStatic:
+			if s.briefcase.ShouldRefreshSecret(secret) {
+				log.Debug().Msg("refreshing secret")
+
+				if secret.Lifetime == util.LifetimeToken {
+					if err := s.cacheSecrets(util.LifetimeToken); err != nil {
+						return err
+					}
+				}
+
+				if err := s.cacheSecrets(util.LifetimeStatic); err != nil {
+					return err
+				}
+
+				var kvSecrets []briefcase.SimpleSecret
+
+				// make a copy
+				kvSecrets = append(kvSecrets, s.briefcase.GetSecrets(util.LifetimeStatic)...)
+				kvSecrets = append(kvSecrets, s.briefcase.GetSecrets(util.LifetimeVersion)...)
+
+				if secret.Lifetime == util.LifetimeToken {
+					kvSecrets = append(kvSecrets, s.briefcase.GetSecrets(util.LifetimeToken)...)
+				}
+
+				count, err := secrets.WriteSecretFields(secret, kvSecrets)
+				if err != nil {
+					log.Error().Err(err).Msg("failed to write secret")
+					return err
+				}
+				*updates += count
+				s.briefcase.EnrollSecret(secret)
+			}
+		default:
+			log.Error().Str("lifetime", string(secret.Lifetime)).Msg("internal error: missing code to sync secrets with lifetime")
+		}
+	}
+	return nil
+}
+
+func (s *Syncer) compareTemplates(updates *int) error {
 	for _, tmpl := range s.config.VaultConfig.Templates {
 		log := s.log.With().Interface("tmplCfg", tmpl).Logger()
 		log.Debug().Msg("checking template")
@@ -40,7 +129,6 @@ func (s *Syncer) compareTemplates(updates *int, nextSync time.Time) error {
 }
 
 func (s *Syncer) compareSSHCertificates(updates *int, nextSync time.Time) error {
-
 	for _, ssh := range s.config.VaultConfig.SSHCertificates {
 		log := s.log.With().Interface("sshCfg", ssh).Logger()
 		log.Debug().Msg("checking SSH certificate")
@@ -66,7 +154,6 @@ func (s *Syncer) compareSSHCertificates(updates *int, nextSync time.Time) error 
 }
 
 func (s *Syncer) compareAWS(updates *int, nextSync time.Time) error {
-
 	for _, aws := range s.config.VaultConfig.AWS {
 		log := s.log.With().Interface("awsCfg", aws).Logger()
 		log.Debug().Msg("checking AWS STS credential")

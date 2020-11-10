@@ -55,11 +55,12 @@ func WriteComposite(composite config.CompositeSecretFile, cache briefcase.Secret
 	return nil
 }
 
-func WriteSecret(secret config.SecretType, kvSecrets []briefcase.SimpleSecret) error {
+func WriteSecretFields(secret config.SecretType, kvSecrets []briefcase.SimpleSecret) (int, error) {
 	mode, err := util.StringToFileMode(secret.Mode)
+	count := 0
 
 	if err != nil {
-		return fmt.Errorf("could not parse file mode %q for key %q: %w",
+		return count, fmt.Errorf("could not parse file mode %q for key %q: %w",
 			secret.Mode, secret.Key, err)
 	}
 
@@ -67,11 +68,12 @@ func WriteSecret(secret config.SecretType, kvSecrets []briefcase.SimpleSecret) e
 	for _, field := range secret.Fields {
 		if field.Output != "" {
 			if err := writeField(secret, kvSecrets, field, *mode); err != nil {
-				return err
+				return count, err
 			}
+			count++
 		}
 	}
-	return nil
+	return count, nil
 }
 
 func writeField(secret config.SecretType, kvSecrets []briefcase.SimpleSecret, field config.SecretFieldType, mode os.FileMode) error {
@@ -102,7 +104,7 @@ func writeField(secret config.SecretType, kvSecrets []briefcase.SimpleSecret, fi
 			if err != nil {
 				return fmt.Errorf("failed to base64 decode field %q for secret %q: %w", field.Name, secret.Key, err)
 			}
-			_, err = fmt.Fprint(file, decoded)
+			_, err = fmt.Fprint(file, string(decoded))
 		default:
 			_, err = fmt.Fprint(file, value)
 		}
