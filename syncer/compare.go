@@ -51,6 +51,12 @@ func (s *Syncer) compareSecrets(ctx context.Context, updates *int) error {
 						return fmt.Errorf("could not write secret %q: %w", secret.Path, err)
 					}
 					*updates += count
+
+					if count > 0 {
+						if err := util.TouchFile(secret.TouchFile); err != nil {
+							log.Warn().Str("touchfile", secret.TouchFile).Err(err).Msg("failed to 'touch' touchfile.")
+						}
+					}
 					s.briefcase.VersionScopedSecrets[secret.Path] = *ss.Version
 				} else {
 					log.Debug().Msg("not updating secret")

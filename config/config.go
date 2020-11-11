@@ -36,6 +36,7 @@ type SecretType struct {
 	UseKeyAsPrefix bool                `yaml:"use_key_as_prefix"`
 	Path           string              `yaml:"path"`
 	Fields         []SecretFieldType   `yaml:"fields"`
+	TouchFile      string              `yaml:"touchfile"`
 	Output         string              `yaml:"output"`
 	Lifetime       util.SecretLifetime `yaml:"lifetime"`
 	Mode           string              `yaml:"mode"`
@@ -314,6 +315,14 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) []error 
 
 		if secret.Lifetime == util.LifetimeVersion && len(secret.Fields) == 0 {
 			errs = append(errs, fmt.Errorf("secret %q - at least one field of a secret must be specified when using a lifetime of %q", secret.Key, util.LifetimeVersion))
+		}
+
+		if secret.TouchFile != "" && secret.Lifetime != util.LifetimeVersion {
+			errs = append(errs, fmt.Errorf("secret %q - touch files are only used for fields of secrets with lifetime of %q", secret.Key, util.LifetimeVersion))
+		}
+
+		if secret.TouchFile != "" {
+			secret.TouchFile = util.AbsolutePath(outputPrefix, secret.TouchFile)
 		}
 
 		if secret.Key != "" && keys[secret.Key] {

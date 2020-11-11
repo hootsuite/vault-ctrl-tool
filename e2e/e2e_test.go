@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	testing2 "k8s.io/utils/clock/testing"
+	"os"
 	"path"
 	"testing"
 	"time"
@@ -41,8 +42,11 @@ secrets:
 
 	fixture.vaultClient.EXPECT().ReadWithData(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(path string, data map[string][]string) (*api.Secret, error) {
+
+			// Expect a request for the absolute secret path of version 3.
 			assert.Equal(t, "/prefix/path/in/vault", path)
 			assert.Len(t, data, 1)
+			assert.Equal(t, []string{"3"}, data["version"])
 			response := Secret(exampleSecretJSON)
 			return response, nil
 		}).Times(1)
@@ -126,8 +130,9 @@ secrets:
 	assert.FileExists(t, path.Join(fixture2.workDir, "foo"))
 
 	foobytes, _ = ioutil.ReadFile(path.Join(fixture2.workDir, "foo"))
-	assert.Equal(t, "aaaa2", string(foobytes))
 
+	// Since the secret is quite old, expect the field to be updated.
+	assert.Equal(t, "aaaa2", string(foobytes))
 	assert.Equal(t, 1, fixture1.metrics.Counter(mtrics.SecretUpdates))
 	assert.Equal(t, 0, fixture1.metrics.Counter(mtrics.VaultTokenWritten))
 
@@ -145,6 +150,7 @@ secrets:
    missingOk: false
    mode: 0700
    lifetime: version
+   touchfile: test-touchfile
    fields:
     - name: foo
       output: foo
@@ -183,6 +189,10 @@ secrets:
 	assert.Equal(t, 1, fixture1.metrics.Counter(mtrics.SecretUpdates))
 	assert.Equal(t, 0, fixture1.metrics.Counter(mtrics.VaultTokenWritten))
 
+	// Expect the "touchfile" to exist since the fields were written.
+	assert.FileExists(t, path.Join(fixture1.workDir, "test-touchfile"))
+	assert.NoError(t, os.Remove(path.Join(fixture1.workDir, "test-touchfile")))
+
 	// Now, do this again, except with a new version of the secret in Vault
 
 	fixture2 := setupSyncWithDir(t, configBody, []string{"--sidecar", "--one-shot", "--vault-token", "unit-test-token"}, sharedDir)
@@ -202,6 +212,10 @@ secrets:
 	err = fixture2.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
 
 	assert.NoError(t, err)
+
+	// Expect the touchfile to _not_ exist, since the fields were not updated.
+	assert.NoFileExists(t, path.Join(fixture2.workDir, "test-touchfile"))
+
 	assert.FileExists(t, path.Join(fixture2.workDir, "foo"))
 
 	foobytes, _ = ioutil.ReadFile(path.Join(fixture2.workDir, "foo"))
@@ -279,7 +293,9 @@ secrets:
 			return response, nil
 		}).Times(1)
 
-	err := fixture.syncer.PerformSync(context.Background(), time.Now().AddDate(1, 0, 0), *fixture.cliFlags)
+	fakeClock := testing2.NewFakeClock(time.Now())
+	ctx := clock.Set(context.Background(), fakeClock)
+	err := fixture.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
 
 	assert.NoError(t, err)
 
