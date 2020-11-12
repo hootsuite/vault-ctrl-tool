@@ -1,3 +1,5 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/hootsuite/vault-ctrl-tool)](https://goreportcard.com/report/github.com/hootsuite/vault-ctrl-tool)
+
 # Welcome
 
 Hi! Thanks for taking a look at `vault-ctrl-tool`. This is a little tool that manages, authentication, 
