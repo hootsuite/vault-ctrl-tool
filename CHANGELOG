@@ -1,9 +1,9 @@
 10-Nov-2020
- * secrets that are only output raw fields can now have a lifetime of "version". The output of these fields
+ * secrets that only output raw fields can now have a lifetime of "version". The output of these fields
    will be updated when the version # of the secret changes
- * output of raw fields support base64 decoding with "encoding: base64"
+ * output of raw fields support base64 decoding with "encoding: base64" per-field
  * secrets can be pinned to a specific version - this is generally inadvisable, but can be done if needed
-   for testing
+   for testing with "pinnedVersion:"
  * secrets with lifetime of "version" can specify a "touchfile" which is touched when any fields are rewritten (for
    external services to trigger refreshes). Touchfiles are only touched after fields are rewritten.
 
