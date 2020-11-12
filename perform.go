@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,6 +23,7 @@ const ShutdownFileCheckFrequency = 18 * time.Second
 
 func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 
+	mtrics := metrics.NewMetrics()
 	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
 		zlog.Error().Err(err).Msg("could not create exclusive flock")
@@ -30,13 +32,13 @@ func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 	defer lockHandle.Unlock(false)
 
 	zlog.Debug().Str("briefcase", flags.BriefcaseFilename).Str("buildVersion", buildVersion).Msg("starting oneshot")
-	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
+	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename, mtrics)
 	if err != nil {
 		zlog.Warn().Str("briefcase", flags.BriefcaseFilename).Err(err).Msg("could not load briefcase - starting an empty one")
-		bc = briefcase.NewBriefcase()
+		bc = briefcase.NewBriefcase(mtrics)
 	}
 
-	sync, err := syncer.SetupSyncer(flags, bc)
+	sync, err := syncer.SetupSyncer(flags, bc, mtrics)
 	if err != nil {
 		return err
 	}
@@ -47,6 +49,7 @@ func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 func PerformInit(ctx context.Context, flags util.CliFlags) error {
 
 	zlog.Info().Str("buildVersion", buildVersion).Msg("starting")
+	mtrics := metrics.NewMetrics()
 
 	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
@@ -64,7 +67,7 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 		}
 	}
 
-	sync, err := syncer.SetupSyncer(flags, briefcase.NewBriefcase())
+	sync, err := syncer.SetupSyncer(flags, briefcase.NewBriefcase(mtrics), mtrics)
 
 	if err != nil {
 		return err
@@ -73,7 +76,7 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 	return sync.PerformSync(ctx, clock.Now(ctx).Add(24*time.Hour), flags)
 }
 
-func sidecarSync(ctx context.Context, flags util.CliFlags, c chan os.Signal) {
+func sidecarSync(ctx context.Context, mtrcs *metrics.Metrics, flags util.CliFlags, c chan os.Signal) {
 	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
 		zlog.Error().Err(err).Msg("could not create exclusive flock")
@@ -82,7 +85,7 @@ func sidecarSync(ctx context.Context, flags util.CliFlags, c chan os.Signal) {
 	}
 	defer lockHandle.Unlock(true)
 
-	sync, err := makeSyncer(flags)
+	sync, err := makeSyncer(flags, mtrcs)
 	if err != nil {
 		zlog.Error().Err(err).Msg("could not create syncer")
 		c <- os.Interrupt
@@ -102,10 +105,12 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, syscall.SIGTERM)
 
+	mtrcs := metrics.NewMetrics()
+
 	go func() {
 		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Str("buildVersion", buildVersion).Msg("starting")
 
-		sidecarSync(ctx, flags, c)
+		sidecarSync(ctx, mtrcs, flags, c)
 
 		renewTicker := time.NewTicker(flags.RenewInterval)
 		defer renewTicker.Stop()
@@ -117,7 +122,7 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 			select {
 			case <-renewTicker.C:
 				zlog.Info().Msg("heartbeat")
-				sidecarSync(ctx, flags, c)
+				sidecarSync(ctx, mtrcs, flags, c)
 			case <-jobCompletionTicker.C:
 				if flags.ShutdownTriggerFile != "" {
 					zlog.Debug().Str("triggerFile", flags.ShutdownTriggerFile).Msg("performing completion check against file")
@@ -141,7 +146,7 @@ func PerformCleanup(flags util.CliFlags) error {
 
 	log.Info().Msg("performing cleanup")
 
-	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
+	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename, nil)
 	if err != nil {
 		log.Warn().Err(err).Msg("could not open briefcase")
 	} else {
@@ -151,7 +156,7 @@ func PerformCleanup(flags util.CliFlags) error {
 			if err != nil {
 				log.Error().Err(err).Msg("could not create new vault client to revoke token")
 			} else {
-				vaultClient.Delegate().SetToken(bc.AuthTokenLease.Token)
+				vaultClient.SetToken(bc.AuthTokenLease.Token)
 				if err := vaultClient.Delegate().Auth().Token().RevokeSelf("ignored"); err != nil {
 					log.Warn().Err(err).Msg("unable to revoke vault token")
 				}
@@ -163,7 +168,7 @@ func PerformCleanup(flags util.CliFlags) error {
 		}
 	}
 
-	cfg, err := config.ReadConfig(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
+	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
 	if err != nil {
 		log.Warn().Msg("could not read config file - unsure what to cleanup")
 		return fmt.Errorf("could not read config file %q: %w", flags.ConfigFile, err)
@@ -176,14 +181,14 @@ func PerformCleanup(flags util.CliFlags) error {
 	return nil
 }
 
-func makeSyncer(flags util.CliFlags) (*syncer.Syncer, error) {
-	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename)
+func makeSyncer(flags util.CliFlags, mtrcs *metrics.Metrics) (*syncer.Syncer, error) {
+	bc, err := briefcase.LoadBriefcase(flags.BriefcaseFilename, mtrcs)
 	if err != nil {
 		zlog.Warn().Str("briefcase", flags.BriefcaseFilename).Err(err).Msg("could not load briefcase - starting an empty one")
-		bc = briefcase.NewBriefcase()
+		bc = briefcase.NewBriefcase(mtrcs)
 	}
 
-	sync, err := syncer.SetupSyncer(flags, bc)
+	sync, err := syncer.SetupSyncer(flags, bc, mtrcs)
 	if err != nil {
 		return nil, err
 	}

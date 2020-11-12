@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"io/ioutil"
 	"time"
 
@@ -26,20 +27,24 @@ type Briefcase struct {
 	StaticTemplates        map[string]bool                `json:"static_templates,omitempty"`
 	TokenScopedSecrets     map[string]bool                `json:"tokenscoped_secrets,omitempty"`
 	StaticScopedSecrets    map[string]bool                `json:"static_secrets,omitempty"`
+	VersionScopedSecrets   map[string]int64               `json:"versioned_secrets,omitempty"`
 	TokenScopedComposites  map[string]bool                `json:"tokenscoped_composites,omitempty"`
 	StaticScopedComposites map[string]bool                `json:"static_composites,omitempty"`
 
 	// cache of secrets, not persisted
-	tokenScopedCache  []SimpleSecret
-	staticScopedCache []SimpleSecret
+	secretCache map[util.SecretLifetime][]SimpleSecret
 
-	log zerolog.Logger
+	log     zerolog.Logger
+	metrics *metrics.Metrics
 }
 
+// SimpleSecret is a field in a secret, but also contains some important information about the secret itself.
 type SimpleSecret struct {
-	Key   string
-	Field string
-	Value interface{}
+	Key         string
+	Field       string
+	Value       interface{}
+	Version     *int64
+	CreatedTime *time.Time
 }
 
 type sshCert struct {
@@ -61,7 +66,7 @@ type leasedAWSCredential struct {
 }
 
 // NewBriefcase creates an empty briefcase.
-func NewBriefcase() *Briefcase {
+func NewBriefcase(mtrics *metrics.Metrics) *Briefcase {
 	return &Briefcase{
 		AWSCredentialLeases:    make(map[string]leasedAWSCredential),
 		SSHCertificates:        make(map[string]sshCert),
@@ -69,9 +74,12 @@ func NewBriefcase() *Briefcase {
 		StaticTemplates:        make(map[string]bool),
 		TokenScopedSecrets:     make(map[string]bool),
 		StaticScopedSecrets:    make(map[string]bool),
+		VersionScopedSecrets:   make(map[string]int64),
 		TokenScopedComposites:  make(map[string]bool),
 		StaticScopedComposites: make(map[string]bool),
 		log:                    zlog.Logger,
+		metrics:                mtrics,
+		secretCache:            make(map[util.SecretLifetime][]SimpleSecret),
 	}
 }
 
@@ -79,7 +87,10 @@ func NewBriefcase() *Briefcase {
 // that weren't "static" will likely soon expire and disappear. By resetting the briefcase, it will cause
 // all the non-static secrets to be recreated.
 func (b *Briefcase) ResetBriefcase() *Briefcase {
-	newBriefcase := NewBriefcase()
+
+	b.metrics.Increment(metrics.BriefcaseReset)
+
+	newBriefcase := NewBriefcase(b.metrics)
 	// AWS Credentials is done through sts:AssumeRole which currently has no reasonable
 	// revocation mechanism, so credentials remain valid across tokens.
 	newBriefcase.AWSCredentialLeases = b.AWSCredentialLeases
@@ -89,20 +100,20 @@ func (b *Briefcase) ResetBriefcase() *Briefcase {
 	newBriefcase.SSHCertificates = b.SSHCertificates
 
 	newBriefcase.StaticScopedSecrets = b.StaticScopedSecrets
+	newBriefcase.VersionScopedSecrets = b.VersionScopedSecrets
 	newBriefcase.StaticScopedComposites = b.StaticScopedComposites
 	newBriefcase.StaticTemplates = b.StaticTemplates
-	newBriefcase.staticScopedCache = b.staticScopedCache
 	return newBriefcase
 }
 
-func LoadBriefcase(filename string) (*Briefcase, error) {
+func LoadBriefcase(filename string, mtrics *metrics.Metrics) (*Briefcase, error) {
 	zlog.Info().Str("filename", filename).Msg("reading briefcase")
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
 
-	bc := NewBriefcase()
+	bc := NewBriefcase(mtrics)
 	err = json.Unmarshal(bytes, bc)
 	if err != nil {
 		return nil, err

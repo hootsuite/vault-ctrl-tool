@@ -111,10 +111,10 @@ func (auth *kubernetesAuthenticator) ProcessConfigMap(item v12.ConfigMap) (*util
 
 		secret, err := auth.vaultClient.VerifyVaultToken(token)
 		if err != nil {
-			return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Delegate().Address(), err)
+			return nil, fmt.Errorf("failed to authenticate to Vault server %q using token from vault-token ConfigMap: %w", auth.vaultClient.Address(), err)
 		}
 		if secret == nil {
-			return nil, fmt.Errorf("got nil secret authenticating to Vault Server %q using token from vault-token ConfigMap", auth.vaultClient.Delegate().Address())
+			return nil, fmt.Errorf("got nil secret authenticating to Vault Server %q using token from vault-token ConfigMap", auth.vaultClient.Address())
 		}
 
 		// For backwards compatibility, tokens are expected to be renewable. This can be overridden if "renewable: false" is set in the configmap.

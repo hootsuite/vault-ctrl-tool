@@ -23,7 +23,7 @@ func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*
 
 	log.Info().Msg("fetching AWS STS credentials")
 
-	result, err := vc.delegate.Logical().Write(path, nil)
+	result, err := vc.Delegate().Logical().Write(path, nil)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to fetch AWS credentials")
 		return nil, nil, fmt.Errorf("could not fetch AWS credentials from %q: %w", path, err)

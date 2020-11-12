@@ -11,18 +11,23 @@
 ### Concepts
 
 At the top of your configuration file, is a `version`. Upgrading from one configuration version to another may
-require some small changes to your configuration file.  See the README at the root of the project.
+require some small changes to your configuration file.  See the README and CHANGELOG at the root of the project.
 
 Secrets and templates both have a `lifetime`. Lifetimes are how the tool knows when it needs to rewrite your
-secrets or templates. Two lifetimes are currently understood; `token` and `static`. Secrets and templates with
-static lifetimes are never rewritten once they're initially created. It is assumed the secrets in those files
-are static, and as a service using this tool, you would rather have to force restarting things in order to
-get new secrets (either by restarting your Kubernetes pod, terminating an EC2 instance in an ASG, or deleting
-the briefcase file - causing the tool to lose state).
+secrets or templates. Templates and secrets can use `token` and `static`. There is a third lifetime of
+`version` discussed below. Secrets and templates with static lifetimes are never rewritten once they're
+initially created. It is assumed the secrets in those files are static, and as a service using this tool,
+you would rather have to force restarting things in order to get new secrets (either by restarting your
+Kubernetes pod, terminating an EC2 instance in an ASG, or deleting the briefcase file - causing the tool to lose state).
 
-The lifetime of 'token' indicates that the secrets contained in the files become invalid if the Vault token
+The lifetime of `token` indicates that the secrets contained in the files become invalid if the Vault token
 being used expires. These secrets will be fetched again, and files will be rewritten out of necessity after the tool
-re-authenticates. 
+re-authenticates.
+
+The lifetime of `version` is quite special, only valid on secrets stored in a KVv2 backend, and has a limited use case. 
+Secrets that do not have an `output` may use `version`. When the tool runs, it will always fetch a copy of the secret from
+Vault. If the version in Vault is newer than the one in the briefcase, and the new secret is older than 30 seconds, any
+fields that specify an `output` will be overwritten. See the [Secrets](#secrets) section below before using this.
 
 These examples assume you're running with `--input-prefix /etc/vault-config --output-prefix /etc/secrets`.
 
@@ -57,6 +62,10 @@ templates:
 
 ### Secrets
 
+Secrets are a core piece of Vault, so there are a few examples here.
+
+#### Secrets: Original Example
+
 ```yaml
 #
 # The /secret/ backend (aka the v1 kv secrets backend). The specified "path" is read from Vault,
@@ -79,16 +88,67 @@ secrets:
           output: api/key
         - name: api_secret
           output: api/secret
+        - name: license
+          output: license.key
+          encoding: base64
+
 # If "example/keys" had a secret of "foo" with the value "bar", then templates could
 # reference {{.ex_foo}} to get "bar", and the file /etc/secrets/example/target/example.secrets would
 # have the JSON of '{"ex_foo": "bar"}' in it (as "use_key_as_prefix" is set to true).
 # If Vault doesn't have an "example/keys", then it will be
-# noisily ignored as 'missingOk' is set -- the tool cannot tell the difference between a path it
+# noisily ignored as 'missingOk' is set to true -- the tool cannot tell the difference between a path it
 # cannot access and a path with no secrets. Be warned. The contents of the individual fields in the
 # secret ("api_key" and "api_secret") will be written verbatim to "/etc/secrets/api/key" and
-# "/etc/secrets/api/secret" if they're present. All files share the same file mode.
+# "/etc/secrets/api/secret" if the fields present. The field "license" will be written to 
+# "/etc/secrets/license.key", but the value stored in Vault will be manually base64 decoded. Fields must
+# be manually base64 encoded before being written to take advangate of "encoding: base64".
+# NOTE: All files share the same file mode.
 # NOTE: If you have multiple secrets sharing the same output file, they will use the file mode
 # of the first stanza.
+```
+
+#### Secrets: Pinned Version
+
+```yaml
+# A small example using "pinnedVersion". This only works on KVv2 secrets and is very dangerous to use.
+# If you forget that pinnedVersion is set and update your secrets, systems using the old version will cease to function
+# which can easily lead to outages. Use only sparingly for testing. Do not use this defensively "just in case someone"
+# changes the secret.
+
+secrets:
+    - path: example/keys
+      output: example.secrets
+      mode: 0700
+      missingOk: false
+      pinnedVersion: 2
+      lifetime: static
+
+```
+
+#### Secrets: "Version" Lifetime
+
+```yaml
+# Version lifetimes are available for secrets that do not have an "output". They inherently go against the
+# existing workflow that one would expect from vault-ctrl-tool. 
+
+secrets:
+  - key: ex
+    path: example/keys
+    mode: 0777
+    missingOk: false
+    lifetime: version
+    touchfile: /etc/third-party/last-refresh
+    fields:
+      - name: api_key
+        output: api/key
+      - name: api_secret
+        output: api/secret
+
+# Each time vault-ctrl-tool runs to synchronize the on-disk output with what is in Vault, it will fetch the above
+# secret from Vault. If the version in Vault is newer, and at least 30 seconds old, it will rewrite the output
+# of the fields (in this case "api/key" and "api/secret"). After it rewrites the fields, it will "touch" the
+# listed "touchfile" (in this case "/etc/third-party/last-refresh"). Services that want to be notified when there
+# are changes must watch the "touchfile" which will be touched after all the fields are updated.
 ```
 
 ### SSH

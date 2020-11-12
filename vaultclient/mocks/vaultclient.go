@@ -123,3 +123,59 @@ func (mr *MockVaultClientMockRecorder) ServiceSecretPrefix(configVersion interfa
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceSecretPrefix", reflect.TypeOf((*MockVaultClient)(nil).ServiceSecretPrefix), configVersion)
 }
+
+// Address mocks base method
+func (m *MockVaultClient) Address() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Address")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Address indicates an expected call of Address
+func (mr *MockVaultClientMockRecorder) Address() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Address", reflect.TypeOf((*MockVaultClient)(nil).Address))
+}
+
+// ReadWithData mocks base method
+func (m *MockVaultClient) ReadWithData(arg0 string, arg1 map[string][]string) (*api.Secret, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadWithData", arg0, arg1)
+	ret0, _ := ret[0].(*api.Secret)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadWithData indicates an expected call of ReadWithData
+func (mr *MockVaultClientMockRecorder) ReadWithData(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadWithData", reflect.TypeOf((*MockVaultClient)(nil).ReadWithData), arg0, arg1)
+}
+
+// Read mocks base method
+func (m *MockVaultClient) Read(arg0 string) (*api.Secret, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Read", arg0)
+	ret0, _ := ret[0].(*api.Secret)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Read indicates an expected call of Read
+func (mr *MockVaultClientMockRecorder) Read(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockVaultClient)(nil).Read), arg0)
+}
+
+// SetToken mocks base method
+func (m *MockVaultClient) SetToken(token string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetToken", token)
+}
+
+// SetToken indicates an expected call of SetToken
+func (mr *MockVaultClientMockRecorder) SetToken(token interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToken", reflect.TypeOf((*MockVaultClient)(nil).SetToken), token)
+}

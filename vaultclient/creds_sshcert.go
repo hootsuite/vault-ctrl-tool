@@ -104,7 +104,7 @@ func (vc *wrappedVaultClient) signKey(log zerolog.Logger, outputPath string, vau
 	signedKey := resp.Data["signed_key"]
 	if signedKey == nil {
 		return fmt.Errorf("did not receive a signed_key from Vault at %q when signing key at %q with \"%s/sign/%s\"",
-			vc.Delegate().Address(), outputPath, vaultMount, vaultRole)
+			vc.Address(), outputPath, vaultMount, vaultRole)
 	}
 	signedKeyString, ok := resp.Data["signed_key"].(string)
 	if !ok {

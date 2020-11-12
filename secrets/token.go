@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"fmt"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"os"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
@@ -9,7 +10,7 @@ import (
 	zlog "github.com/rs/zerolog/log"
 )
 
-func WriteVaultToken(tokenCfg config.VaultTokenType, vaultToken string) error {
+func WriteVaultToken(m *metrics.Metrics, tokenCfg config.VaultTokenType, vaultToken string) error {
 
 	if tokenCfg.Output == "" {
 		zlog.Warn().Interface("tokenCfg", tokenCfg).Msg("no output file specified to write vault token")
@@ -39,5 +40,6 @@ func WriteVaultToken(tokenCfg config.VaultTokenType, vaultToken string) error {
 		return fmt.Errorf("failed to create Vault token file %q: %w", tokenCfg.Output, err)
 	}
 
+	m.Increment(metrics.VaultTokenWritten)
 	return nil
 }

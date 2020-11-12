@@ -1,16 +1,18 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // VaultTokenType for writing the contents of a VAULT_TOKEN to the specified file with the specified mode.
@@ -34,17 +36,34 @@ type SecretType struct {
 	UseKeyAsPrefix bool                `yaml:"use_key_as_prefix"`
 	Path           string              `yaml:"path"`
 	Fields         []SecretFieldType   `yaml:"fields"`
+	TouchFile      string              `yaml:"touchfile"`
 	Output         string              `yaml:"output"`
 	Lifetime       util.SecretLifetime `yaml:"lifetime"`
 	Mode           string              `yaml:"mode"`
 	IsMissingOk    bool                `yaml:"missingOk"`
+	PinnedVersion  *int                `yaml:"pinnedVersion,omitempty"`
+}
+
+// NeedsMetadata determines if the tool needs metadata from Vault in order to correctly process the secret. This will
+// cause errors if the metadata for a secret isn't available and it's needed.
+func (secretType *SecretType) NeedsMetadata() bool {
+	if secretType == nil {
+		return false
+	}
+
+	if secretType.Lifetime == util.LifetimeVersion || secretType.PinnedVersion != nil {
+		return true
+	}
+
+	return false
 }
 
 // SecretFieldType is used to just output the contents of specific fields to specific files. Their mode will
 // be the same as "mode" in the SecretType they belong.
 type SecretFieldType struct {
-	Name   string `yaml:"name"`
-	Output string `yaml:"output"`
+	Name     string `yaml:"name"`
+	Output   string `yaml:"output"`
+	Encoding string `yaml:"encoding"`
 }
 
 // SSHCertificateType for SSH certificate signing. This tool will write private, public, and certificate files to the
@@ -93,39 +112,24 @@ type ControlToolConfig struct {
 	Composites  map[string]*CompositeSecretFile
 }
 
-func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
-	if configFile == "" {
-		return nil, fmt.Errorf("a --config file is required to be specified")
-	}
-
-	absConfigFile := util.AbsolutePath(inputPrefix, configFile)
-
-	log := zlog.With().Str("cfg", absConfigFile).Logger()
-	log.Debug().Msg("reading config file")
-
-	yamlFile, err := ioutil.ReadFile(absConfigFile)
-
-	if err != nil {
-		log.Error().Err(err).Msg("could not read config file")
-		return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
-	}
+func ReadConfig(log zerolog.Logger, config []byte, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
 
 	var current VaultConfig
 
-	err = yaml.Unmarshal(yamlFile, &current)
-
-	if err != nil {
+	if err := yaml.Unmarshal(config, &current); err != nil {
 		log.Error().Err(err).Msg("could not unmarshal config file")
-		return nil, fmt.Errorf("could not unmarshal config file %q: %w", absConfigFile, err)
+		return nil, fmt.Errorf("could not unmarshal config file: %w", err)
 	}
 
 	current.log = log
 
-	err = current.prepareConfig(inputPrefix, outputPrefix)
+	errs := current.prepareConfig(inputPrefix, outputPrefix)
 
-	if err != nil {
-		log.Error().Err(err).Msg("failed to process config file")
-		return nil, err
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error().Err(err).Msg("issue with config")
+		}
+		return nil, fmt.Errorf("%d error(s) processing config", len(errs))
 	}
 
 	log.Debug().Interface("cfg", current).Msg("parsed configuration file")
@@ -145,6 +149,26 @@ func ReadConfig(configFile string, inputPrefix, outputPrefix string) (*ControlTo
 		Templates:   templates,
 		Composites:  composites,
 	}, nil
+}
+func ReadConfigFile(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
+	if configFile == "" {
+		return nil, fmt.Errorf("a --config file is required to be specified")
+	}
+
+	absConfigFile := util.AbsolutePath(inputPrefix, configFile)
+
+	log := zlog.With().Str("cfg", absConfigFile).Logger()
+	log.Debug().Msg("reading config file")
+
+	yamlFile, err := ioutil.ReadFile(absConfigFile)
+
+	if err != nil {
+		log.Error().Err(err).Msg("could not read config file")
+		return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
+	}
+
+	return ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+
 }
 
 // createCompositeSecrets brings an obscure feature of v1 where multiple secret stanzas could
@@ -178,14 +202,15 @@ func (cfg *VaultConfig) createCompositeSecrets() (map[string]*CompositeSecretFil
 }
 
 // Validate the configuration and do any modifications that make the rest of the code easier.
-func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
+func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) []error {
+
+	var errs []error
 
 	if cfg.isEmpty() {
 		cfg.log.Warn().Msg("configuration file lists nothing to output")
 	}
 
 	keys := make(map[string]bool)
-	var happy = true
 
 	if cfg.VaultToken.Output != "" {
 		cfg.VaultToken.Output = util.AbsolutePath(outputPrefix, cfg.VaultToken.Output)
@@ -195,20 +220,29 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 	var tidyTpls []TemplateType
 
 	for _, tpl := range cfg.Templates {
-		if tpl.Lifetime == "" && cfg.ConfigVersion < 3 {
-			tpl.Lifetime = util.LifetimeStatic
-		}
 
 		if tpl.Input == "" {
-			cfg.log.Warn().Msg("there is a template stanza missing a input file in the configuration file ('input')")
-			happy = false
+			errs = append(errs, fmt.Errorf("there is a template stanza missing a input file in the configuration file ('input')"))
 		} else {
 			tpl.Input = util.AbsolutePath(inputPrefix, tpl.Input)
 		}
 
+		if tpl.Lifetime != "" && cfg.ConfigVersion < 3 {
+			errs = append(errs, fmt.Errorf("template %q - lifetime is only supported when config version is at least 3", tpl.Input))
+		}
+
+		if tpl.Lifetime == "" && cfg.ConfigVersion < 3 {
+			tpl.Lifetime = util.LifetimeStatic
+		}
+
+		if tpl.Lifetime == util.LifetimeVersion {
+			// If you're seeing this, it's not because it isn't valuable - it surely is - but it's more work than I want
+			// to tackle right now.
+			errs = append(errs, fmt.Errorf("template %q - templates do not support %q lifetime", tpl.Input, util.LifetimeVersion))
+		}
+
 		if tpl.Lifetime != util.LifetimeStatic && tpl.Lifetime != util.LifetimeToken {
-			cfg.log.Warn().Str("template", tpl.Input).Msg("template is missing a lifetime attribute")
-			happy = false
+			errs = append(errs, fmt.Errorf("template %q - template is missing a lifetime attribute", tpl.Input))
 		}
 
 		if tpl.Output == "" {
@@ -225,29 +259,43 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 	var tidySecrets []SecretType
 
 	for _, secret := range cfg.Secrets {
+
 		if secret.Key == "" {
-			cfg.log.Warn().Msg("there is a secret stanza missing a 'key' value in the configuration file")
-			happy = false
+			errs = append(errs, fmt.Errorf("there is a secret stanza missing a 'key' value in the configuration file"))
+			continue
+		}
+
+		if secret.Path == "" {
+			errs = append(errs, fmt.Errorf("secret %q - no Vault path specified for secret in configuration file", secret.Key))
+			continue
+		}
+
+		if secret.Lifetime != "" && cfg.ConfigVersion < 3 {
+			errs = append(errs, fmt.Errorf("secret %q - uses a lifetime, but config version is less than 3", secret.Key))
 		}
 
 		if secret.Lifetime == "" && cfg.ConfigVersion < 3 {
 			secret.Lifetime = util.LifetimeStatic
 		}
 
-		if secret.Lifetime != util.LifetimeStatic && secret.Lifetime != util.LifetimeToken {
-			cfg.log.Warn().Str("secret", secret.Key).Msg("secret is missing a lifetime attribute")
-			happy = false
+		if secret.Lifetime != util.LifetimeStatic && secret.Lifetime != util.LifetimeToken && secret.Lifetime != util.LifetimeVersion {
+			errs = append(errs, fmt.Errorf("secret %q - secret is missing a lifetime attribute", secret.Key))
 		}
 
 		var tidyFields []SecretFieldType
 		for _, field := range secret.Fields {
 			if field.Name == "" {
-				cfg.log.Warn().Str("secret", secret.Key).Msg("there is a field in this secret missing 'name' value in the configuration file")
-				happy = false
+				errs = append(errs, fmt.Errorf("secret %q - there is a field in this secret missing 'name' value in the configuration file", secret.Key))
+			}
+
+			field.Encoding = strings.ToLower(field.Encoding)
+			if field.Encoding != "" && field.Encoding != util.EncodingBase64 && field.Encoding != util.EncodingNone {
+				errs = append(errs, fmt.Errorf("secret %q - field %q - encoding %q - if specified, encoding must be %q or %q",
+					secret.Key, field.Name, field.Encoding, util.EncodingBase64, util.EncodingNone))
 			}
 			if field.Output == "" {
-				cfg.log.Warn().Str("field", field.Name).Str("key", secret.Key).Msg("this field is missing an 'output'")
-				happy = false
+				errs = append(errs, fmt.Errorf("secret %q - field - %q - this field is missing an 'output'",
+					secret.Key, field.Name))
 			} else {
 				field.Output = util.AbsolutePath(outputPrefix, field.Output)
 			}
@@ -260,13 +308,25 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 			secret.Output = util.AbsolutePath(outputPrefix, secret.Output)
 		}
 
-		if secret.Path == "" {
-			return fmt.Errorf("no Vault path specified for secrets key %q in configuration file", secret.Key)
+		if secret.Output != "" && secret.Lifetime == util.LifetimeVersion {
+			errs = append(errs, fmt.Errorf("secret %q - output %q - cannot use an output file when a secret has a lifetime of %q; this only works with fields of a secret",
+				secret.Key, secret.Output, util.LifetimeVersion))
+		}
+
+		if secret.Lifetime == util.LifetimeVersion && len(secret.Fields) == 0 {
+			errs = append(errs, fmt.Errorf("secret %q - at least one field of a secret must be specified when using a lifetime of %q", secret.Key, util.LifetimeVersion))
+		}
+
+		if secret.TouchFile != "" && secret.Lifetime != util.LifetimeVersion {
+			errs = append(errs, fmt.Errorf("secret %q - touch files are only used for fields of secrets with lifetime of %q", secret.Key, util.LifetimeVersion))
+		}
+
+		if secret.TouchFile != "" {
+			secret.TouchFile = util.AbsolutePath(outputPrefix, secret.TouchFile)
 		}
 
 		if secret.Key != "" && keys[secret.Key] {
-			cfg.log.Warn().Str("key", secret.Key).Msg("duplicate secret key found in configuration file")
-			happy = false
+			errs = append(errs, fmt.Errorf("secret %q - duplicate secret key found in configuration file", secret.Key))
 		}
 		keys[secret.Key] = true
 		tidySecrets = append(tidySecrets, secret)
@@ -279,16 +339,15 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 
 	for _, sshCert := range cfg.SSHCertificates {
 		if sshCert.VaultRole == "" {
-			cfg.log.Warn().Msg("there is a SSH certificate stanza missing its 'vaultRole'")
-			happy = false
+			errs = append(errs, fmt.Errorf("there is a SSH certificate stanza missing its 'vaultRole'"))
 		}
+
 		if sshCert.VaultMount == "" {
-			cfg.log.Warn().Str("vaultRole", sshCert.VaultRole).Msg("ssh certificate stanza is missing a 'vaultMountPoint'")
-			happy = false
+			errs = append(errs, fmt.Errorf("vaultRole %q - ssh certificate stanza is missing a 'vaultMountPoint'", sshCert.VaultRole))
 		}
+
 		if sshCert.OutputPath == "" {
-			cfg.log.Warn().Str("vaultMount", sshCert.VaultMount).Str("vaultRole", sshCert.VaultRole).Msg("ssh certificate stanza is missing an 'outputPath'")
-			happy = false
+			errs = append(errs, fmt.Errorf("vaultMount %q vaultRole %q - ssh certificate stanza is missing an 'outputPath'", sshCert.VaultMount, sshCert.VaultRole))
 		} else {
 			sshCert.OutputPath = util.AbsolutePath(outputPrefix, sshCert.OutputPath)
 		}
@@ -302,25 +361,21 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 
 	for _, aws := range cfg.AWS {
 		if aws.VaultRole == "" {
-			cfg.log.Warn().Msg("there is an AWS stanza missing its 'vaultRole'")
-			happy = false
+			errs = append(errs, errors.New("there is an AWS stanza missing its 'vaultRole'"))
 		}
 		if aws.VaultMountPoint == "" {
-			cfg.log.Warn().Str("vaultRole", aws.VaultRole).Msg("aws stanza is missing a Vault mount point")
-			happy = false
+			errs = append(errs, fmt.Errorf("vaultRole %q - aws stanza is missing a Vault mount point", aws.VaultRole))
 		}
+
 		if aws.Profile == "" {
-			cfg.log.Warn().Str("vaultRole", aws.VaultRole).Msg("aws stanza is missing an AWS profile name")
-			happy = false
+			errs = append(errs, fmt.Errorf("vaultRole %q - aws stanza is missing an AWS profile name", aws.VaultRole))
 		}
 		if aws.Region == "" {
-			cfg.log.Warn().Str("vaultRole", aws.VaultRole).Msg("aws stanza is missing an AWS region")
-			happy = false
+			errs = append(errs, fmt.Errorf("vaultRole %q - aws stanza is missing an AWS region", aws.VaultRole))
 		}
 
 		if aws.OutputPath == "" {
-			cfg.log.Warn().Str("vaultRole", aws.VaultRole).Msg("aws stanza is missing an output path")
-			happy = false
+			errs = append(errs, fmt.Errorf("vaultRole %q - aws stanza is missing an output path", aws.VaultRole))
 		} else {
 			aws.OutputPath = util.AbsolutePath(outputPrefix, aws.OutputPath)
 		}
@@ -329,11 +384,7 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) error {
 
 	cfg.AWS = tidyAWS
 
-	// If we're not happy and we know it, clap^Wfail fatally..
-	if !happy {
-		return fmt.Errorf("there are issues that need to be resolved with the configuration file")
-	}
-	return nil
+	return errs
 }
 
 func (cfg VaultConfig) Cleanup() {

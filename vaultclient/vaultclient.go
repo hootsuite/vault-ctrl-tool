@@ -18,6 +18,11 @@ type VaultClient interface {
 	CreateSSHCertificate(sshConfig config.SSHCertificateType) error
 	RefreshVaultToken() (*api.Secret, error)
 	ServiceSecretPrefix(configVersion int) string
+
+	Address() string
+	ReadWithData(string, map[string][]string) (*api.Secret, error)
+	Read(string) (*api.Secret, error)
+	SetToken(token string)
 }
 
 type wrappedVaultClient struct {
@@ -44,6 +49,21 @@ func NewVaultClient(secretsPrefix string) (VaultClient, error) {
 
 func (vc *wrappedVaultClient) Delegate() *api.Client {
 	return vc.delegate
+}
+
+func (vc *wrappedVaultClient) Address() string {
+	return vc.delegate.Address()
+}
+
+func (vc *wrappedVaultClient) SetToken(token string) {
+	vc.delegate.SetToken(token)
+}
+func (vc *wrappedVaultClient) ReadWithData(path string, data map[string][]string) (*api.Secret, error) {
+	return vc.delegate.Logical().ReadWithData(path, data)
+}
+
+func (vc *wrappedVaultClient) Read(path string) (*api.Secret, error) {
+	return vc.delegate.Logical().Read(path)
 }
 
 func (vc *wrappedVaultClient) VerifyVaultToken(vaultToken string) (*api.Secret, error) {
