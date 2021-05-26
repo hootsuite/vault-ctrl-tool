@@ -46,7 +46,7 @@ func (b *Briefcase) EnrollAWSCredential(ctx context.Context, awsCreds *api.Secre
 		if refreshExpiry.After(expiry) {
 			b.log.Warn().Msgf("forceRefreshTTL is longer than the expiry of aws credentials")
 		}
-		b.log.Info().Time("expiry", expiry).Time("refreshTime", exp).Int("TTL", int(forceRefreshTTL.Minutes())).Str("outputPath", awsConfig.OutputPath).
+		b.log.Info().Time("expiry", expiry).Time("refreshTime", exp).Str("outputPath", awsConfig.OutputPath).
 			Msg("enrolling AWS credential")
 	} else {
 		b.log.Info().Time("expiry", expiry).Str("outputPath", awsConfig.OutputPath).
