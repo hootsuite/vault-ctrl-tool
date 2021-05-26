@@ -1,6 +1,7 @@
 package briefcase
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -20,10 +22,29 @@ func (b *Briefcase) ShouldRefreshSSHCertificate(sshCertConfig config.SSHCertific
 	}
 
 	b.log.Debug().Time("expiry", entry.Expiry).Str("outputPath", sshCertConfig.OutputPath).Msg("determined expiry of ssh certificate")
-	return entry.Expiry.Before(expiresBefore) || entry.Expiry == neverExpires
+
+	certExpiresBefore := entry.Expiry.Before(expiresBefore) || entry.Expiry == neverExpires
+	shouldRefreshBefore := entry.RefreshExpiry != nil && !entry.RefreshExpiry.IsZero() && entry.RefreshExpiry.Before(expiresBefore)
+
+	return certExpiresBefore || shouldRefreshBefore
 }
 
-func (b *Briefcase) EnrollSSHCertificate(sshCertConfig config.SSHCertificateType) error {
+func createRefreshExpiry(ctx context.Context, forceRefreshTTL time.Duration) *time.Time {
+	var refreshExpiry *time.Time
+	// we only add a refresh if a ttl value was set.
+	if forceRefreshTTL > 0 {
+		exp := clock.Now(ctx).Add(forceRefreshTTL)
+		refreshExpiry = &exp
+	}
+	return refreshExpiry
+}
+
+// EnrollSSHCertificate adds a managed SSH certificate to briefcase. If forceRefreshTTL is not zero, then it will associate a
+// refresh expiry time with the certificate.
+func (b *Briefcase) EnrollSSHCertificate(ctx context.Context, sshCertConfig config.SSHCertificateType, forceRefreshTTL time.Duration) error {
+	if forceRefreshTTL < 0 {
+		return fmt.Errorf("forceRefreshTTL cannot be negative: %s", forceRefreshTTL)
+	}
 
 	certificateFilename := filepath.Join(sshCertConfig.OutputPath, util.SSHCertificate)
 
@@ -47,8 +68,9 @@ func (b *Briefcase) EnrollSSHCertificate(sshCertConfig config.SSHCertificateType
 
 	log.Debug().Time("validBefore", validBeforeTime).Msg("ssh certificate validity")
 	b.SSHCertificates[sshCertConfig.OutputPath] = sshCert{
-		Expiry: validBeforeTime,
-		Cfg:    sshCertConfig,
+		Expiry:        validBeforeTime,
+		RefreshExpiry: createRefreshExpiry(ctx, forceRefreshTTL),
+		Cfg:           sshCertConfig,
 	}
 	return nil
 }

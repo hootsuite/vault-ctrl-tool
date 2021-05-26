@@ -3,9 +3,10 @@ package util
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/alecthomas/kingpin.v2"
 	"os"
 	"time"
+
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // v1 of vault-ctrl-tool had some bad ideas about parsing command line arguments. This is kept for compatibility.
@@ -33,6 +34,8 @@ type CliFlags struct {
 	KubernetesAuthRole     string        // enables Kubernetes auth, and sets role to use with Kubernetes authentication
 	DebugLogLevel          bool          // enable debug logging
 	CliVaultTokenRenewable bool          // is the vault token supplied on the command line renewable?
+	ForceRefreshTTL        time.Duration // secrets will be refreshed after this duration, regardless of their expiry.
+	STSTTL                 time.Duration // configures what TTL to use for AWS STS tokens.
 }
 
 type RunMode int
@@ -117,6 +120,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	app.Flag("renew-lease-duration", "unused, kept for compatibility").Default("1h").Duration()
 	app.Flag("vault-token", "Vault token to use during initialization; overrides VAULT_TOKEN environment variable").StringVar(&flags.VaultTokenArg)
 	app.Flag("token-renewable", "Is the token supplied on the command line renewable?").Default("true").BoolVar(&flags.CliVaultTokenRenewable)
+	app.Flag("force-refresh-ttl", "If set, secrets will be refreshed after this period regardless of whether they are set to expire (just uses tokenn TTL if zero)").Default("0s").DurationVar(&flags.ForceRefreshTTL)
 
 	// Kubernetes Authentication
 	app.Flag("k8s-token-file", "Service account token path").Default("/var/run/secrets/kubernetes.io/serviceaccount/token").StringVar(&flags.ServiceAccountToken)
@@ -130,6 +134,9 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	// IAM Authentication
 	app.Flag("iam-auth-role", "The role used to perform iam authentication").Default("").StringVar(&flags.IAMAuthRole)
 	app.Flag("iam-vault-auth-backend", "The name of the auth backend in Vault to perform iam authentication against. Defaults to `aws`.").Default("aws").StringVar(&flags.IAMVaultAuthBackend)
+
+	// STS Authentication
+	app.Flag("sts-ttl", "The TTL to use for generating AWS STS tokens, if set to zero then will not override TTL. Defaults to 0").Default("0s").DurationVar(&flags.STSTTL)
 
 	// Show version
 	app.Flag("version", "Display build version").Default("false").BoolVar(&flags.ShowVersion)
@@ -175,7 +182,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	}
 
 	if actions != 1 {
-		return nil, errors.New("specify exactly one of --init, --sidecar, or --cleanup flags")
+		return nil, errors.New("specify exactly one of --init, --sidecar, --version  or --cleanup flags")
 	}
 
 	return &flags, nil

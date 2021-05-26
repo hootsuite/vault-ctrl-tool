@@ -3,11 +3,12 @@ package syncer
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
 	"github.com/hootsuite/vault-ctrl-tool/v2/secrets"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
-	"time"
 )
 
 func (s *Syncer) compareSecrets(ctx context.Context, updates *int) error {
@@ -134,7 +135,7 @@ func (s *Syncer) compareTemplates(updates *int) error {
 	return nil
 }
 
-func (s *Syncer) compareSSHCertificates(updates *int, nextSync time.Time) error {
+func (s *Syncer) compareSSHCertificates(ctx context.Context, updates *int, nextSync time.Time, forceRefreshTTL time.Duration) error {
 	for _, ssh := range s.config.VaultConfig.SSHCertificates {
 		log := s.log.With().Interface("sshCfg", ssh).Logger()
 		log.Debug().Msg("checking SSH certificate")
@@ -150,7 +151,7 @@ func (s *Syncer) compareSSHCertificates(updates *int, nextSync time.Time) error 
 				return err
 			}
 
-			if err := s.briefcase.EnrollSSHCertificate(ssh); err != nil {
+			if err := s.briefcase.EnrollSSHCertificate(ctx, ssh, forceRefreshTTL); err != nil {
 				log.Error().Err(err).Msg("failed to enroll SSH certificate in briefcase")
 				return err
 			}
@@ -159,17 +160,22 @@ func (s *Syncer) compareSSHCertificates(updates *int, nextSync time.Time) error 
 	return nil
 }
 
-func (s *Syncer) compareAWS(updates *int, nextSync time.Time) error {
+func (s *Syncer) compareAWS(ctx context.Context, updates *int, nextSync time.Time, stsTTL, forceRefreshTTL time.Duration) error {
 	for _, aws := range s.config.VaultConfig.AWS {
 		log := s.log.With().Interface("awsCfg", aws).Logger()
 		log.Debug().Msg("checking AWS STS credential")
 
-		if s.briefcase.AWSCredentialExpiresBefore(aws, nextSync) {
+		if s.briefcase.AWSCredentialShouldRefreshBefore(aws, nextSync) || s.briefcase.AWSCredentialExpiresBefore(aws, nextSync) {
 			if updates != nil {
 				*updates++
 			}
-			log.Debug().Msg("refreshing AWS STS credential")
-			creds, secret, err := s.vaultClient.FetchAWSSTSCredential(aws)
+
+			log.Debug().
+				Bool("forcedRefreshBeforeNextHearbeat", s.briefcase.AWSCredentialShouldRefreshBefore(aws, nextSync)).
+				Bool("credentialExpiresBeforeNextHeartbeat", s.briefcase.AWSCredentialExpiresBefore(aws, nextSync)).
+				Msg("refreshing AWS STS credential")
+
+			creds, secret, err := s.vaultClient.FetchAWSSTSCredential(aws, stsTTL)
 
 			if err != nil {
 				log.Error().Err(err).Msg("failed to fetch AWS STS credentials")
@@ -181,7 +187,7 @@ func (s *Syncer) compareAWS(updates *int, nextSync time.Time) error {
 				return err
 			}
 
-			s.briefcase.EnrollAWSCredential(context.TODO(), secret.Secret, aws)
+			s.briefcase.EnrollAWSCredential(ctx, secret.Secret, aws, forceRefreshTTL)
 		}
 	}
 	return nil

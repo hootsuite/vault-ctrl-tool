@@ -1,6 +1,8 @@
 package vaultclient
 
 import (
+	"time"
+
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
@@ -14,7 +16,7 @@ const SecretsServicePathV2 = "/kv/data/application-config/services/"
 type VaultClient interface {
 	VerifyVaultToken(vaultToken string) (*api.Secret, error)
 	Delegate() *api.Client
-	FetchAWSSTSCredential(awsConfig config.AWSType) (*AWSSTSCredential, *util.WrappedToken, error)
+	FetchAWSSTSCredential(awsConfig config.AWSType, stsTTL time.Duration) (*AWSSTSCredential, *util.WrappedToken, error)
 	CreateSSHCertificate(sshConfig config.SSHCertificateType) error
 	RefreshVaultToken() (*api.Secret, error)
 	ServiceSecretPrefix(configVersion int) string

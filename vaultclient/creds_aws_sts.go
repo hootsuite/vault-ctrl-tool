@@ -2,8 +2,10 @@ package vaultclient
 
 import (
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"path/filepath"
+	"time"
+
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
 )
@@ -14,7 +16,7 @@ type AWSSTSCredential struct {
 	SessionToken string
 }
 
-func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*AWSSTSCredential, *util.WrappedToken, error) {
+func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType, stsTTL time.Duration) (*AWSSTSCredential, *util.WrappedToken, error) {
 
 	path := filepath.Join(awsConfig.VaultMountPoint, "creds", awsConfig.VaultRole)
 
@@ -23,7 +25,14 @@ func (vc *wrappedVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*
 
 	log.Info().Msg("fetching AWS STS credentials")
 
-	result, err := vc.Delegate().Logical().Write(path, nil)
+	var data map[string]interface{}
+	if stsTTL != 0 { // use default if ttl is 0.
+		data = map[string]interface{}{
+			"ttl": stsTTL.String(),
+		}
+	}
+
+	result, err := vc.Delegate().Logical().Write(path, data)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to fetch AWS credentials")
 		return nil, nil, fmt.Errorf("could not fetch AWS credentials from %q: %w", path, err)
