@@ -1,3 +1,6 @@
+26-May-2021
+ * Added --force-refresh-ttl which temporary credentials will optionally be renewed before their actual expiry.
+
 10-Nov-2020
  * secrets that only output raw fields can now have a lifetime of "version". The output of these fields
    will be updated when the version # of the secret changes

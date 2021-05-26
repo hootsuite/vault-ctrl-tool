@@ -16,12 +16,20 @@ import (
 	testing2 "k8s.io/utils/clock/testing"
 )
 
+const (
+	fakeSSHKeySize = 4096
+)
+
+var (
+	testTime = time.Unix(1443332960, 0)
+)
+
 func createSSHSignedPublicKey(testTime time.Time, dir string, certTTL time.Duration, t *testing.T) {
 	assert := assert.New(t)
-	hostKeys, err := rsa.GenerateKey(rand.Reader, 4096)
+	hostKeys, err := rsa.GenerateKey(rand.Reader, fakeSSHKeySize)
 	assert.NoError(err)
 
-	clientKeys, err := rsa.GenerateKey(rand.Reader, 4096)
+	clientKeys, err := rsa.GenerateKey(rand.Reader, fakeSSHKeySize)
 	assert.NoError(err)
 	clientPKey, err := ssh.NewPublicKey(&clientKeys.PublicKey)
 	assert.NoError(err)
@@ -45,8 +53,6 @@ func createSSHSignedPublicKey(testTime time.Time, dir string, certTTL time.Durat
 
 func TestSSHCredentialsExpireAndRefreshCheck(t *testing.T) {
 	assert := assert.New(t)
-
-	testTime := time.Unix(1443332960, 0)
 
 	ctx := clock.Set(context.Background(), testing2.NewFakeClock(testTime))
 
