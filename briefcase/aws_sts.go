@@ -32,10 +32,12 @@ func (b *Briefcase) AWSCredentialShouldRefreshBefore(awsConfig config.AWSType, r
 	return entry.RefreshExpiry != nil && !entry.RefreshExpiry.IsZero() && refreshBefore.After(*entry.RefreshExpiry)
 }
 
-// EnrollAWSCredenntial adds or replaces a managed AWS credential to briefcase. IF forceRefreshTTL is not zero then it will associate
+// EnrollAWSCredenntial adds or replaces a managed AWS credential to briefcase. If forceRefreshTTL is not zero then it will associate
 // refresh expirty time with the certificate.
 func (b *Briefcase) EnrollAWSCredential(ctx context.Context, awsCreds *api.Secret, awsConfig config.AWSType, forceRefreshTTL time.Duration) {
 	expiry := clock.Now(ctx).Add(time.Second * time.Duration(awsCreds.LeaseDuration))
+
+	b.log.Debug().Int("forceRefreshTTL", int(forceRefreshTTL)).Msg("attempting to enroll aws_sts creds")
 
 	var refreshExpiry *time.Time
 
