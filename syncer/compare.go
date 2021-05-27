@@ -163,7 +163,7 @@ func (s *Syncer) compareSSHCertificates(ctx context.Context, updates *int, nextS
 func (s *Syncer) compareAWS(ctx context.Context, updates *int, nextSync time.Time, stsTTL, forceRefreshTTL time.Duration) error {
 	for _, aws := range s.config.VaultConfig.AWS {
 		log := s.log.With().Interface("awsCfg", aws).Logger()
-		log.Debug().Int("stsTTL", int(stsTTL)).Int("forceRefreshTTL", int(forceRefreshTTL)).Msg("checking AWS STS credential")
+		log.Debug().Msg("checking AWS STS credential")
 
 		if s.briefcase.AWSCredentialShouldRefreshBefore(aws, nextSync) || s.briefcase.AWSCredentialExpiresBefore(aws, nextSync) {
 			if updates != nil {
@@ -187,7 +187,6 @@ func (s *Syncer) compareAWS(ctx context.Context, updates *int, nextSync time.Tim
 				return err
 			}
 
-			log.Info().Int("ttl", int(forceRefreshTTL)).Msg("done creating creds, enrolling now")
 			s.briefcase.EnrollAWSCredential(ctx, secret.Secret, aws, forceRefreshTTL)
 		}
 	}
