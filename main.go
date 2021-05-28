@@ -11,7 +11,10 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-var buildVersion string
+var (
+	buildVersion  string
+	commitVersion string
+)
 
 func setupLogging(debug bool) {
 	log.Logger = log.With().Caller().Logger()
@@ -41,6 +44,7 @@ func main() {
 	switch flags.RunMode() {
 	case util.ModeShowVersion:
 		fmt.Printf("Version: %s\n", buildVersion)
+		fmt.Printf("Commit: %s\n", commitVersion)
 	case util.ModeInit:
 		if err := PerformInit(context.Background(), *flags); err != nil {
 			panic(err)

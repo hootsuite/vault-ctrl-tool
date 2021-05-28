@@ -1,5 +1,7 @@
-26-May-2021
+v1.2.0: 26-May-2021
  * Added --force-refresh-ttl which temporary credentials will optionally be renewed before their actual expiry.
+ * Added --sts-ttl flag which lets you specify token ttl for aws tokens
+ generated using sts.
 
 10-Nov-2020
  * secrets that only output raw fields can now have a lifetime of "version". The output of these fields
