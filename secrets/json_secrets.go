@@ -52,6 +52,13 @@ func WriteComposite(composite config.CompositeSecretFile, cache briefcase.Secret
 		}
 	}
 
+	if composite.Secrets.Owner != nil {
+        err = os.Chown(composite.Filename, composite.Secrets.Owner , composite.Secrets.Owner)
+        if err != nil {
+           return fmt.Errorf("failed changing ownership to file %q: %w", composite.Filename, err)
+        }
+    }
+
 	return nil
 }
 
@@ -110,6 +117,13 @@ func writeField(secret config.SecretType, kvSecrets []briefcase.SimpleSecret, fi
 		}
 		if err != nil {
 			return fmt.Errorf("failed writing secret to file %q: %w", field.Output, err)
+		}
+
+		if secret.Owner != nil {
+            err = os.Chown(field.Output, secret.Owner , secret.Owner)
+            if err != nil {
+                return fmt.Errorf("failed changing ownership to file %q: %w", field.Output, err)
+            }
 		}
 	}
 

@@ -81,6 +81,7 @@ secrets:
       output: example/target/example.secrets
       use_key_as_prefix: true
       mode: 0777
+      owner: root
       missingOk: true
       lifetime: static
       fields:
@@ -102,6 +103,7 @@ secrets:
 # "/etc/secrets/api/secret" if the fields present. The field "license" will be written to 
 # "/etc/secrets/license.key", but the value stored in Vault will be manually base64 decoded. Fields must
 # be manually base64 encoded before being written to take advangate of "encoding: base64".
+# If owner is specified, the ownership of all secret files will be changed to the owner.
 # NOTE: All files share the same file mode.
 # NOTE: If you have multiple secrets sharing the same output file, they will use the file mode
 # of the first stanza.
