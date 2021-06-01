@@ -7,12 +7,10 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
-
-	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
-
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 )

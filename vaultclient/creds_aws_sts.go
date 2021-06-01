@@ -5,9 +5,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/util"
-
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 )
 
 type AWSSTSCredential struct {

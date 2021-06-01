@@ -6,13 +6,11 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/util"
-
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
 	"github.com/rs/zerolog"
-
 	zlog "github.com/rs/zerolog/log"
 )
 

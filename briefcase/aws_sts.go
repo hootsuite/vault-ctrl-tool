@@ -22,7 +22,7 @@ func (b *Briefcase) AWSCredentialExpiresBefore(awsConfig config.AWSType, expires
 	return !entry.Expiry.After(expiresBefore)
 }
 
-// AWSCredentialsShouldRefresh checks if a set of AWS credentials should be refreshed.
+// AWSCredentialsShouldRefresh checks if a set of AWS credentials should be force refreshed according to it's refresh_expiry.
 func (b *Briefcase) AWSCredentialShouldRefreshBefore(awsConfig config.AWSType, refreshBefore time.Time) bool {
 	entry, ok := b.AWSCredentialLeases[awsConfig.OutputPath]
 	if !ok {
@@ -53,7 +53,6 @@ func (b *Briefcase) EnrollAWSCredential(ctx context.Context, awsCreds *api.Secre
 	} else {
 		b.log.Info().Time("expiry", expiry).Str("outputPath", awsConfig.OutputPath).
 			Msg("enrolling AWS credential")
-		refreshExpiry = nil
 	}
 
 	b.AWSCredentialLeases[awsConfig.OutputPath] = leasedAWSCredential{

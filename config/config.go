@@ -8,16 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v2"
-)
-
-const (
-	defaultTTL = time.Hour
 )
 
 // VaultTokenType for writing the contents of a VAULT_TOKEN to the specified file with the specified mode.
