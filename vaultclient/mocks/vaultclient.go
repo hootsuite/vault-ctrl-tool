@@ -5,126 +5,40 @@
 package mock_vaultclient
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	api "github.com/hashicorp/vault/api"
 	config "github.com/hootsuite/vault-ctrl-tool/v2/config"
 	util "github.com/hootsuite/vault-ctrl-tool/v2/util"
 	vaultclient "github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
-	reflect "reflect"
 )
 
-// MockVaultClient is a mock of VaultClient interface
+// MockVaultClient is a mock of VaultClient interface.
 type MockVaultClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockVaultClientMockRecorder
 }
 
-// MockVaultClientMockRecorder is the mock recorder for MockVaultClient
+// MockVaultClientMockRecorder is the mock recorder for MockVaultClient.
 type MockVaultClientMockRecorder struct {
 	mock *MockVaultClient
 }
 
-// NewMockVaultClient creates a new mock instance
+// NewMockVaultClient creates a new mock instance.
 func NewMockVaultClient(ctrl *gomock.Controller) *MockVaultClient {
 	mock := &MockVaultClient{ctrl: ctrl}
 	mock.recorder = &MockVaultClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockVaultClient) EXPECT() *MockVaultClientMockRecorder {
 	return m.recorder
 }
 
-// VerifyVaultToken mocks base method
-func (m *MockVaultClient) VerifyVaultToken(vaultToken string) (*api.Secret, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VerifyVaultToken", vaultToken)
-	ret0, _ := ret[0].(*api.Secret)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// VerifyVaultToken indicates an expected call of VerifyVaultToken
-func (mr *MockVaultClientMockRecorder) VerifyVaultToken(vaultToken interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyVaultToken", reflect.TypeOf((*MockVaultClient)(nil).VerifyVaultToken), vaultToken)
-}
-
-// Delegate mocks base method
-func (m *MockVaultClient) Delegate() *api.Client {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delegate")
-	ret0, _ := ret[0].(*api.Client)
-	return ret0
-}
-
-// Delegate indicates an expected call of Delegate
-func (mr *MockVaultClientMockRecorder) Delegate() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delegate", reflect.TypeOf((*MockVaultClient)(nil).Delegate))
-}
-
-// FetchAWSSTSCredential mocks base method
-func (m *MockVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType) (*vaultclient.AWSSTSCredential, *util.WrappedToken, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchAWSSTSCredential", awsConfig)
-	ret0, _ := ret[0].(*vaultclient.AWSSTSCredential)
-	ret1, _ := ret[1].(*util.WrappedToken)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// FetchAWSSTSCredential indicates an expected call of FetchAWSSTSCredential
-func (mr *MockVaultClientMockRecorder) FetchAWSSTSCredential(awsConfig interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAWSSTSCredential", reflect.TypeOf((*MockVaultClient)(nil).FetchAWSSTSCredential), awsConfig)
-}
-
-// CreateSSHCertificate mocks base method
-func (m *MockVaultClient) CreateSSHCertificate(sshConfig config.SSHCertificateType) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateSSHCertificate", sshConfig)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateSSHCertificate indicates an expected call of CreateSSHCertificate
-func (mr *MockVaultClientMockRecorder) CreateSSHCertificate(sshConfig interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSSHCertificate", reflect.TypeOf((*MockVaultClient)(nil).CreateSSHCertificate), sshConfig)
-}
-
-// RefreshVaultToken mocks base method
-func (m *MockVaultClient) RefreshVaultToken() (*api.Secret, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshVaultToken")
-	ret0, _ := ret[0].(*api.Secret)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RefreshVaultToken indicates an expected call of RefreshVaultToken
-func (mr *MockVaultClientMockRecorder) RefreshVaultToken() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshVaultToken", reflect.TypeOf((*MockVaultClient)(nil).RefreshVaultToken))
-}
-
-// ServiceSecretPrefix mocks base method
-func (m *MockVaultClient) ServiceSecretPrefix(configVersion int) string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ServiceSecretPrefix", configVersion)
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// ServiceSecretPrefix indicates an expected call of ServiceSecretPrefix
-func (mr *MockVaultClientMockRecorder) ServiceSecretPrefix(configVersion interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceSecretPrefix", reflect.TypeOf((*MockVaultClient)(nil).ServiceSecretPrefix), configVersion)
-}
-
-// Address mocks base method
+// Address mocks base method.
 func (m *MockVaultClient) Address() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Address")
@@ -132,28 +46,57 @@ func (m *MockVaultClient) Address() string {
 	return ret0
 }
 
-// Address indicates an expected call of Address
+// Address indicates an expected call of Address.
 func (mr *MockVaultClientMockRecorder) Address() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Address", reflect.TypeOf((*MockVaultClient)(nil).Address))
 }
 
-// ReadWithData mocks base method
-func (m *MockVaultClient) ReadWithData(arg0 string, arg1 map[string][]string) (*api.Secret, error) {
+// CreateSSHCertificate mocks base method.
+func (m *MockVaultClient) CreateSSHCertificate(sshConfig config.SSHCertificateType) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadWithData", arg0, arg1)
-	ret0, _ := ret[0].(*api.Secret)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "CreateSSHCertificate", sshConfig)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// ReadWithData indicates an expected call of ReadWithData
-func (mr *MockVaultClientMockRecorder) ReadWithData(arg0, arg1 interface{}) *gomock.Call {
+// CreateSSHCertificate indicates an expected call of CreateSSHCertificate.
+func (mr *MockVaultClientMockRecorder) CreateSSHCertificate(sshConfig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadWithData", reflect.TypeOf((*MockVaultClient)(nil).ReadWithData), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSSHCertificate", reflect.TypeOf((*MockVaultClient)(nil).CreateSSHCertificate), sshConfig)
 }
 
-// Read mocks base method
+// Delegate mocks base method.
+func (m *MockVaultClient) Delegate() *api.Client {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delegate")
+	ret0, _ := ret[0].(*api.Client)
+	return ret0
+}
+
+// Delegate indicates an expected call of Delegate.
+func (mr *MockVaultClientMockRecorder) Delegate() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delegate", reflect.TypeOf((*MockVaultClient)(nil).Delegate))
+}
+
+// FetchAWSSTSCredential mocks base method.
+func (m *MockVaultClient) FetchAWSSTSCredential(awsConfig config.AWSType, stsTTL time.Duration) (*vaultclient.AWSSTSCredential, *util.WrappedToken, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchAWSSTSCredential", awsConfig, stsTTL)
+	ret0, _ := ret[0].(*vaultclient.AWSSTSCredential)
+	ret1, _ := ret[1].(*util.WrappedToken)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// FetchAWSSTSCredential indicates an expected call of FetchAWSSTSCredential.
+func (mr *MockVaultClientMockRecorder) FetchAWSSTSCredential(awsConfig, stsTTL interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAWSSTSCredential", reflect.TypeOf((*MockVaultClient)(nil).FetchAWSSTSCredential), awsConfig, stsTTL)
+}
+
+// Read mocks base method.
 func (m *MockVaultClient) Read(arg0 string) (*api.Secret, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Read", arg0)
@@ -162,20 +105,79 @@ func (m *MockVaultClient) Read(arg0 string) (*api.Secret, error) {
 	return ret0, ret1
 }
 
-// Read indicates an expected call of Read
+// Read indicates an expected call of Read.
 func (mr *MockVaultClientMockRecorder) Read(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockVaultClient)(nil).Read), arg0)
 }
 
-// SetToken mocks base method
+// ReadWithData mocks base method.
+func (m *MockVaultClient) ReadWithData(arg0 string, arg1 map[string][]string) (*api.Secret, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadWithData", arg0, arg1)
+	ret0, _ := ret[0].(*api.Secret)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadWithData indicates an expected call of ReadWithData.
+func (mr *MockVaultClientMockRecorder) ReadWithData(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadWithData", reflect.TypeOf((*MockVaultClient)(nil).ReadWithData), arg0, arg1)
+}
+
+// RefreshVaultToken mocks base method.
+func (m *MockVaultClient) RefreshVaultToken() (*api.Secret, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshVaultToken")
+	ret0, _ := ret[0].(*api.Secret)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshVaultToken indicates an expected call of RefreshVaultToken.
+func (mr *MockVaultClientMockRecorder) RefreshVaultToken() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshVaultToken", reflect.TypeOf((*MockVaultClient)(nil).RefreshVaultToken))
+}
+
+// ServiceSecretPrefix mocks base method.
+func (m *MockVaultClient) ServiceSecretPrefix(configVersion int) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ServiceSecretPrefix", configVersion)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ServiceSecretPrefix indicates an expected call of ServiceSecretPrefix.
+func (mr *MockVaultClientMockRecorder) ServiceSecretPrefix(configVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceSecretPrefix", reflect.TypeOf((*MockVaultClient)(nil).ServiceSecretPrefix), configVersion)
+}
+
+// SetToken mocks base method.
 func (m *MockVaultClient) SetToken(token string) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetToken", token)
 }
 
-// SetToken indicates an expected call of SetToken
+// SetToken indicates an expected call of SetToken.
 func (mr *MockVaultClientMockRecorder) SetToken(token interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToken", reflect.TypeOf((*MockVaultClient)(nil).SetToken), token)
+}
+
+// VerifyVaultToken mocks base method.
+func (m *MockVaultClient) VerifyVaultToken(vaultToken string) (*api.Secret, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyVaultToken", vaultToken)
+	ret0, _ := ret[0].(*api.Secret)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyVaultToken indicates an expected call of VerifyVaultToken.
+func (mr *MockVaultClientMockRecorder) VerifyVaultToken(vaultToken interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyVaultToken", reflect.TypeOf((*MockVaultClient)(nil).VerifyVaultToken), vaultToken)
 }

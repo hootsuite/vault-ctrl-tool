@@ -135,6 +135,7 @@ func ReadConfig(log zerolog.Logger, config []byte, inputPrefix, outputPrefix str
 	log.Debug().Interface("cfg", current).Msg("parsed configuration file")
 	templates, err := current.ingestTemplates()
 	if err != nil {
+		log.Error().Err(err).Msg("failed to parse templates")
 		return nil, err
 	}
 
@@ -203,7 +204,6 @@ func (cfg *VaultConfig) createCompositeSecrets() (map[string]*CompositeSecretFil
 
 // Validate the configuration and do any modifications that make the rest of the code easier.
 func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) []error {
-
 	var errs []error
 
 	if cfg.isEmpty() {
@@ -360,6 +360,7 @@ func (cfg *VaultConfig) prepareConfig(inputPrefix, outputPrefix string) []error 
 	var tidyAWS []AWSType
 
 	for _, aws := range cfg.AWS {
+
 		if aws.VaultRole == "" {
 			errs = append(errs, errors.New("there is an AWS stanza missing its 'vaultRole'"))
 		}

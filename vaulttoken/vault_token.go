@@ -3,15 +3,14 @@ package vaulttoken
 import (
 	"errors"
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"os"
 	"strconv"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
 	"github.com/rs/zerolog"
-
 	zlog "github.com/rs/zerolog/log"
 )
 
@@ -85,7 +84,7 @@ func (vt *vaultTokenManager) Set(authToken *util.WrappedToken) error {
 	return nil
 }
 
-// Looks for a valid Vault token and will extend it out if it's going to expire soon. The extension is just long
+// CheckAndRefresh looks for a valid Vault token and will extend it out if it's going to expire soon. The extension is just long
 // enough to use it for things. Returns ErrNoValidVaultTokenAvailable if none is available, or different errors
 // if something goes wrong along the way.
 func (vt *vaultTokenManager) CheckAndRefresh() error {

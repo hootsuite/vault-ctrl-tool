@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"io/ioutil"
 	"time"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
-
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 )
@@ -48,8 +47,9 @@ type SimpleSecret struct {
 }
 
 type sshCert struct {
-	Expiry time.Time                 `json:"expiry"`
-	Cfg    config.SSHCertificateType `json:"cfg"`
+	Expiry        time.Time                 `json:"expiry"`
+	Cfg           config.SSHCertificateType `json:"cfg"`
+	RefreshExpiry *time.Time                `json:"refresh_expiry,omitempty"`
 }
 
 type LeasedAuthToken struct {
@@ -63,6 +63,7 @@ type LeasedAuthToken struct {
 type leasedAWSCredential struct {
 	AWSCredential config.AWSType `json:"role"`
 	Expiry        time.Time      `json:"expiry"`
+	RefreshExpiry *time.Time     `json:"refresh_expiry,omitempty"`
 }
 
 // NewBriefcase creates an empty briefcase.

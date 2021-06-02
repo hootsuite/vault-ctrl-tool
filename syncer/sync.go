@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/vault/api"
-	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/vault/api"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/vaulttoken"
 
@@ -70,8 +71,8 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 	return log, cfg, vaultClient, nil
 }
 
+// PerformSync does primary VCT syncing logic by obtaining a Vault token and refreshing AWS credentials.
 func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util.CliFlags) error {
-
 	vaultToken, err := s.obtainVaultToken(flags)
 	if err != nil {
 		return err
@@ -110,7 +111,7 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 		}
 	}
 
-	err = s.compareConfigToBriefcase(ctx, nextSync)
+	err = s.compareConfigToBriefcase(ctx, nextSync, flags.STSTTL, flags.ForceRefreshTTL)
 	if err != nil {
 		s.log.Error().Err(err).Msg("could not compare config file against briefcase")
 		return err
@@ -127,14 +128,14 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 // compareConfigToBriefcase does what it says on the tin. Given the list of secrets expected to exist (listed in the config),
 // compare that to the secrets that are being tracked in the briefcase. If they need to be refreshed, then refresh them
 // and update the briefcase.
-func (s *Syncer) compareConfigToBriefcase(ctx context.Context, nextSync time.Time) error {
+func (s *Syncer) compareConfigToBriefcase(ctx context.Context, nextSync time.Time, stsTTL, forceRefreshTTL time.Duration) error {
 	updates := 0
 
-	if err := s.compareAWS(&updates, nextSync); err != nil {
+	if err := s.compareAWS(ctx, &updates, nextSync, stsTTL, forceRefreshTTL); err != nil {
 		return err
 	}
 
-	if err := s.compareSSHCertificates(&updates, nextSync); err != nil {
+	if err := s.compareSSHCertificates(ctx, &updates, nextSync, forceRefreshTTL); err != nil {
 		return err
 	}
 

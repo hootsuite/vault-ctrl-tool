@@ -35,6 +35,7 @@ func mySTSCreds(t *testing.T) api.Secret {
 }
 
 func TestAWSCredentialExpireCheck(t *testing.T) {
+	assert := assert.New(t)
 	awsCreds := mySTSCreds(t)
 	awsConfig := config.AWSType{
 		VaultMountPoint: "aws",
@@ -50,10 +51,18 @@ func TestAWSCredentialExpireCheck(t *testing.T) {
 	ctx := clock.Set(context.Background(), testing2.NewFakeClock(testTime))
 
 	bc := NewBriefcase(nil)
-	bc.EnrollAWSCredential(ctx, &awsCreds, awsConfig)
+	bc.EnrollAWSCredential(ctx, &awsCreds, awsConfig, 0)
 
-	assert.False(t, bc.AWSCredentialExpiresBefore(awsConfig, testTime), "freshly enrolled STS token must not need refreshing")
-	assert.False(t, bc.AWSCredentialExpiresBefore(awsConfig, testTime.Add(3599*time.Second)), "must not return true before the expiry of the STS token")
-	assert.True(t, bc.AWSCredentialExpiresBefore(awsConfig, testTime.Add(time.Hour)), "must return true on the expiry of the token")
-	assert.True(t, bc.AWSCredentialExpiresBefore(awsConfig, testTime.Add(3601*time.Second)), "must return true when creds are expired")
+	assert.False(bc.AWSCredentialExpiresBefore(awsConfig, testTime), "freshly enrolled STS token must not need refreshing")
+	assert.False(bc.AWSCredentialExpiresBefore(awsConfig, testTime.Add(3599*time.Second)), "must not return true before the expiry of the STS token")
+	assert.True(bc.AWSCredentialExpiresBefore(awsConfig, testTime.Add(time.Hour)), "must return true on the expiry of the token")
+	assert.True(bc.AWSCredentialExpiresBefore(awsConfig, testTime.Add(3601*time.Second)), "must return true when creds are expired")
+
+	assert.False(bc.AWSCredentialShouldRefreshBefore(awsConfig, testTime.Add(3601*time.Second)))
+
+	bc.EnrollAWSCredential(ctx, &awsCreds, awsConfig, 3600*time.Second)
+	assert.Equal(bc.AWSCredentialLeases[awsConfig.OutputPath].RefreshExpiry.Format(time.RFC3339Nano), testTime.Add(60*time.Minute).Format(time.RFC3339Nano))
+
+	assert.True(bc.AWSCredentialShouldRefreshBefore(awsConfig, testTime.Add(3601*time.Second)), "must return true when refreshExpiry is before next update")
+	assert.False(bc.AWSCredentialExpiresBefore(awsConfig, testTime), "should still check that fresh STS token is not expired")
 }
