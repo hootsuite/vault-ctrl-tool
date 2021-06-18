@@ -10,11 +10,11 @@ require (
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.6.1
-	golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
+	golang.org/x/crypto v0.0.0-20201002170205-7f63de1d35b0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/api v0.18.8
-	k8s.io/apimachinery v0.18.8
-	k8s.io/client-go v0.18.0
-	k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
+	k8s.io/api v0.20.8
+	k8s.io/apimachinery v0.20.8
+	k8s.io/client-go v0.20.8
+	k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 )
