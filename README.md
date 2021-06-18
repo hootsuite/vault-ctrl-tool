@@ -48,7 +48,6 @@ token-scoped files after they are consumed. Services should also fail-fast if th
 authentication calls to remote services return errors). Kubernetes will restart the service. This will put the service
 into a crashloopbackoff until the Vault Control Tool is able to fetch fresh secrets.
 
-
 ## Other Documents
 
 If you're curious on how to build this in your environment, see [BUILDING.md](docs/BUILDING.md). 
