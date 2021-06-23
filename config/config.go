@@ -40,6 +40,7 @@ type SecretType struct {
 	Output         string              `yaml:"output"`
 	Lifetime       util.SecretLifetime `yaml:"lifetime"`
 	Mode           string              `yaml:"mode"`
+	Owner          string              `yaml:"owner"`
 	IsMissingOk    bool                `yaml:"missingOk"`
 	PinnedVersion  *int                `yaml:"pinnedVersion,omitempty"`
 }
