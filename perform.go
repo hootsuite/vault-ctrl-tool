@@ -199,7 +199,7 @@ func PerformCleanup(flags util.CliFlags) error {
 		}
 	}
 
-	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
+	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.ConfigDir, flags.InputPrefix, flags.OutputPrefix)
 	if err != nil {
 		log.Warn().Msg("could not read config file - unsure what to cleanup")
 		return fmt.Errorf("could not read config file %q: %w", flags.ConfigFile, err)

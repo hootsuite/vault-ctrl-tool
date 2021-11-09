@@ -27,6 +27,7 @@ type CliFlags struct {
 	IAMAuthRole             string        // Role to use when performing IAM authentication of EC2 instances
 	IAMVaultAuthBackend     string        // Override IAM auth path in Vault
 	ConfigFile              string        // location of vault-config, either relative to input prefix, or absolute
+	ConfigDir               string        // location of vault-config directory, either relative to input prefix, or absolute
 	OutputPrefix            string        // prefix to use when writing output files
 	InputPrefix             string        // prefix to use when looking for input files
 	ServiceSecretPrefix     string        // override prefix for relative KV secrets
@@ -110,8 +111,9 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 
 	app.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
 	app.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
+	app.Flag("config-dir", "Full path of the config file to read.").Default("config.d").StringVar(&flags.ConfigDir)
 	app.Flag("output-prefix", "Path to prefix to all output files (such as /etc/secrets)").StringVar(&flags.OutputPrefix)
-	app.Flag("input-prefix", "Path to prefix on all files being read; including the config file.").StringVar(&flags.InputPrefix)
+	app.Flag("input-prefix", "Path to prefix on all files being read; including the config file. Only the main config file (--config-file) will have his root values read. Those in the config directory will be ignored.").StringVar(&flags.InputPrefix)
 	app.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").StringVar(&flags.ServiceSecretPrefix)
 
 	app.Flag("renew-interval", "Interval to renew credentials").Default("9m").DurationVar(&flags.RenewInterval)

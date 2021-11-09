@@ -51,7 +51,7 @@ func TestValidConfigs(t *testing.T) {
 	for k, v := range validConfigs {
 		t.Run(k, func(t *testing.T) {
 			filename := mkConfig(t, v)
-			_, err := ReadConfigFile(filename, "", "")
+			_, err := ReadConfigFile(filename, "", "", "")
 			if err != nil {
 				t.Fatalf("this config must be okay, got error: %v", err)
 			}
@@ -63,7 +63,7 @@ func TestInvalidConfigs(t *testing.T) {
 	for k, v := range invalidConfigs {
 		t.Run(k, func(t *testing.T) {
 			filename := mkConfig(t, v)
-			_, err := ReadConfigFile(filename, "", "")
+			_, err := ReadConfigFile(filename, "", "", "")
 			if err == nil {
 				t.Fatal("this config must generate an error")
 			}

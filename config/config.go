@@ -122,7 +122,6 @@ func ReadConfig(log zerolog.Logger, config []byte, inputPrefix, outputPrefix str
 	}
 
 	current.log = log
-
 	errs := current.prepareConfig(inputPrefix, outputPrefix)
 
 	if len(errs) > 0 {
@@ -151,7 +150,7 @@ func ReadConfig(log zerolog.Logger, config []byte, inputPrefix, outputPrefix str
 		Composites:  composites,
 	}, nil
 }
-func ReadConfigFile(configFile string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
+func ReadConfigFile(configFile string, configDir string, inputPrefix, outputPrefix string) (*ControlToolConfig, error) {
 	if configFile == "" {
 		return nil, fmt.Errorf("a --config file is required to be specified")
 	}
@@ -168,7 +167,36 @@ func ReadConfigFile(configFile string, inputPrefix, outputPrefix string) (*Contr
 		return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
 	}
 
-	return ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+	config, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+
+	items, _ := ioutil.ReadDir(util.AbsolutePath(inputPrefix, configDir))
+	for _, item := range items {
+		fileExtension := filepath.Ext(item.Name())
+		if fileExtension == ".yaml" || fileExtension == ".yml" {
+
+			yamlFile, err := ioutil.ReadFile(util.AbsolutePath(inputPrefix, configDir) + "/" + item.Name())
+			current_config, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+			config.VaultConfig.Secrets = append(config.VaultConfig.Secrets, current_config.VaultConfig.Secrets...)
+			config.VaultConfig.Templates = append(config.VaultConfig.Templates, current_config.VaultConfig.Templates...)
+			config.VaultConfig.SSHCertificates = append(config.VaultConfig.SSHCertificates, current_config.VaultConfig.SSHCertificates...)
+			config.VaultConfig.AWS = append(config.VaultConfig.AWS, current_config.VaultConfig.AWS...)
+			for k, v := range current_config.Templates {
+				config.Templates[k] = v
+			}
+			for k, v := range current_config.Composites {
+				config.Composites[k] = v
+			}
+
+			if err != nil {
+				log.Error().Err(err).Msg("could not read config file")
+				return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
+			}
+		}
+	}
+
+	log.Debug().Msg("reading config file")
+
+	return config, err
 
 }
 
