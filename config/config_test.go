@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
+	"os"
 	"testing"
 )
 
@@ -66,6 +68,23 @@ func TestInvalidConfigs(t *testing.T) {
 			_, err := ReadConfigFile(filename, "", "", "")
 			if err == nil {
 				t.Fatal("this config must generate an error")
+			}
+		})
+	}
+}
+
+func TestConfigDir(t *testing.T) {
+	colorGreen := "\033[32m"
+	colorReset := "\033[0m"
+
+	cwd, _ := os.Getwd()
+	fmt.Println(string(colorGreen), cwd, string(colorReset))
+	for k, v := range validConfigs {
+		t.Run(k, func(t *testing.T) {
+			filename := mkConfig(t, v)
+			_, err := ReadConfigFile(filename, "./config.d", "", "")
+			if err != nil {
+				t.Fatalf("this config must be okay, got error: %v", err)
 			}
 		})
 	}

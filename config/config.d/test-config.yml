@@ -1,0 +1,8 @@
+version: 3
+secrets:
+  - key: test
+    path: /secret/test
+    output: /tmp/tests
+    mode: 0644
+    missingOk: false
+    lifetime: static
