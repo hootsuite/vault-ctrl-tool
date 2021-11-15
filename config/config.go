@@ -169,32 +169,42 @@ func ReadConfigFile(configFile string, configDir string, inputPrefix, outputPref
 
 	config, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
 
-	items, _ := ioutil.ReadDir(util.AbsolutePath(inputPrefix, configDir))
+	if err != nil {
+		log.Error().Err(err).Msg("could not parse config file")
+		return nil, fmt.Errorf("could not parse config file %q: %w", absConfigFile, err)
+	}
+
+	items, err := ioutil.ReadDir(util.AbsolutePath(inputPrefix, configDir))
+	if err != nil {
+		log.Error().Err(err).Msg("Error reading directory")
+		return nil, fmt.Errorf("could not read config directory %q: %w", configDir, err)
+	}
 	for _, item := range items {
 		fileExtension := filepath.Ext(item.Name())
-		if fileExtension == ".yaml" || fileExtension == ".yml" {
+		if (fileExtension == ".yaml" || fileExtension == ".yml") && !item.IsDir() {
 
-			yamlFile, err := ioutil.ReadFile(util.AbsolutePath(inputPrefix, configDir) + "/" + item.Name())
-			current_config, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
-			config.VaultConfig.Secrets = append(config.VaultConfig.Secrets, current_config.VaultConfig.Secrets...)
-			config.VaultConfig.Templates = append(config.VaultConfig.Templates, current_config.VaultConfig.Templates...)
-			config.VaultConfig.SSHCertificates = append(config.VaultConfig.SSHCertificates, current_config.VaultConfig.SSHCertificates...)
-			config.VaultConfig.AWS = append(config.VaultConfig.AWS, current_config.VaultConfig.AWS...)
-			for k, v := range current_config.Templates {
+			currentConfigFile := util.AbsolutePath(inputPrefix, configDir) + "/" + item.Name()
+			log.Debug().Msg("reading config file %q", currentConfigFile)
+			yamlFile, err := ioutil.ReadFile(currentConfigFile)
+			if err != nil {
+				log.Error().Err(err).Msg("could not read config file")
+				return nil, fmt.Errorf("trouble reading config file %q: %w", currentConfigFile, err)
+			}
+
+			currentConfig, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+			config.VaultConfig.Secrets = append(config.VaultConfig.Secrets, currentConfig.VaultConfig.Secrets...)
+			config.VaultConfig.Templates = append(config.VaultConfig.Templates, currentConfig.VaultConfig.Templates...)
+			config.VaultConfig.SSHCertificates = append(config.VaultConfig.SSHCertificates, currentConfig.VaultConfig.SSHCertificates...)
+			config.VaultConfig.AWS = append(config.VaultConfig.AWS, currentConfig.VaultConfig.AWS...)
+			for k, v := range currentConfig.Templates {
 				config.Templates[k] = v
 			}
-			for k, v := range current_config.Composites {
+			for k, v := range currentConfig.Composites {
 				config.Composites[k] = v
 			}
 
-			if err != nil {
-				log.Error().Err(err).Msg("could not read config file")
-				return nil, fmt.Errorf("trouble reading config file %q: %w", absConfigFile, err)
-			}
 		}
 	}
-
-	log.Debug().Msg("reading config file")
 
 	return config, err
 
