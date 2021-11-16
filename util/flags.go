@@ -111,7 +111,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 
 	app.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
 	app.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
-	app.Flag("config-dir", "Full path of the config directory to read config files.").Default("config.d").StringVar(&flags.ConfigDir)
+	app.Flag("config-dir", "Full path of the config directory to read config files. Be aware that the config version is read only once so all sub config should have the same version.").Default("config.d").StringVar(&flags.ConfigDir)
 	app.Flag("output-prefix", "Path to prefix to all output files (such as /etc/secrets)").StringVar(&flags.OutputPrefix)
 	app.Flag("input-prefix", "Path to prefix on all files being read; including the config file. Only the main config file (--config-file) will have his root values read. Those in the config directory will be ignored.").StringVar(&flags.InputPrefix)
 	app.Flag("secret-prefix", "Vault path to prepend to secrets with relative paths").StringVar(&flags.ServiceSecretPrefix)
