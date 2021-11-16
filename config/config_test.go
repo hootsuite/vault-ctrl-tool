@@ -1,9 +1,7 @@
 package config
 
 import (
-	"fmt"
 	"io/ioutil"
-	"os"
 	"testing"
 )
 
@@ -74,17 +72,29 @@ func TestInvalidConfigs(t *testing.T) {
 }
 
 func TestConfigDir(t *testing.T) {
-	colorGreen := "\033[32m"
-	colorReset := "\033[0m"
 
-	cwd, _ := os.Getwd()
-	fmt.Println(string(colorGreen), cwd, string(colorReset))
 	for k, v := range validConfigs {
 		t.Run(k, func(t *testing.T) {
 			filename := mkConfig(t, v)
-			_, err := ReadConfigFile(filename, "./config.d", "", "")
+			config, err := ReadConfigFile(filename, "./config.d", "", "")
 			if err != nil {
-				t.Fatalf("this config must be okay, got error: %v", err)
+				// t.Fail("this config must be okay, got error")
+				t.Fail()
+			}
+			// check if key == test exists
+			// check if key == test2 exists
+			foundKey1 := false
+			foundKey2 := false
+			for _, secret := range config.VaultConfig.Secrets {
+				if secret.Key == "test" {
+					foundKey1 = true
+				}
+				if secret.Key == "test2" {
+					foundKey2 = true
+				}
+			}
+			if !foundKey1 || !foundKey2 {
+				t.Fatal("failed to find keys in config directory")
 			}
 		})
 	}
