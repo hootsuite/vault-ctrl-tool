@@ -184,7 +184,7 @@ func ReadConfigFile(configFile string, configDir string, inputPrefix, outputPref
 		if (fileExtension == ".yaml" || fileExtension == ".yml") && !item.IsDir() {
 
 			currentConfigFile := util.AbsolutePath(inputPrefix, configDir) + "/" + item.Name()
-			log.Debug().Msg("reading config file %q", currentConfigFile)
+			log.Debug().Msg("reading config file " + currentConfigFile)
 			yamlFile, err := ioutil.ReadFile(currentConfigFile)
 			if err != nil {
 				log.Error().Err(err).Msg("could not read config file")
