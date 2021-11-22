@@ -47,10 +47,26 @@ secrets:
 `,
 }
 
+var validSubConfig = map[string]string{
+	"sub config1": `---
+version: 3
+secrets:
+ - key: test
+   path: /secret/test
+   lifetime: static`,
+	"sub config2": `---
+version: 3
+secrets:
+ - key: test2
+   path: /secret/test2
+   lifetime: static
+`,
+}
+
 func TestValidConfigs(t *testing.T) {
 	for k, v := range validConfigs {
 		t.Run(k, func(t *testing.T) {
-			filename := mkConfig(t, v)
+			filename := mkConfig(t, t.TempDir(), v)
 			_, err := ReadConfigFile(filename, "", "", "")
 			if err != nil {
 				t.Fatalf("this config must be okay, got error: %v", err)
@@ -62,7 +78,7 @@ func TestValidConfigs(t *testing.T) {
 func TestInvalidConfigs(t *testing.T) {
 	for k, v := range invalidConfigs {
 		t.Run(k, func(t *testing.T) {
-			filename := mkConfig(t, v)
+			filename := mkConfig(t, t.TempDir(), v)
 			_, err := ReadConfigFile(filename, "", "", "")
 			if err == nil {
 				t.Fatal("this config must generate an error")
@@ -73,35 +89,36 @@ func TestInvalidConfigs(t *testing.T) {
 
 func TestConfigDir(t *testing.T) {
 
-	for k, v := range validConfigs {
-		t.Run(k, func(t *testing.T) {
-			filename := mkConfig(t, v)
-			config, err := ReadConfigFile(filename, "./config.d", "", "")
-			if err != nil {
-				// t.Fail("this config must be okay, got error")
-				t.Fail()
-			}
-			// check if key == test exists
-			// check if key == test2 exists
-			foundKey1 := false
-			foundKey2 := false
-			for _, secret := range config.VaultConfig.Secrets {
-				if secret.Key == "test" {
-					foundKey1 = true
-				}
-				if secret.Key == "test2" {
-					foundKey2 = true
-				}
-			}
-			if !foundKey1 || !foundKey2 {
-				t.Fatal("failed to find keys in config directory")
-			}
-		})
+	dir := t.TempDir()
+	f := mkConfig(t, dir, validSubConfig["sub config1"])
+	t.Log(f)
+	f = mkConfig(t, dir, validSubConfig["sub config2"])
+	t.Log(f)
+	emptyConfig := mkConfig(t, dir, "")
+	config, err := ReadConfigFile(emptyConfig, dir, "", "")
+	if err != nil {
+		t.Log("this config must be okay, got error")
+		t.Fail()
+	}
+	// check if key == test exists
+	// check if key == test2 exists
+	foundKey1 := false
+	foundKey2 := false
+	for _, secret := range config.VaultConfig.Secrets {
+		if secret.Key == "test" {
+			foundKey1 = true
+		}
+		if secret.Key == "test2" {
+			foundKey2 = true
+		}
+	}
+	if !foundKey1 || !foundKey2 {
+		t.Fatal("failed to find keys in config directory")
 	}
 }
 
-func mkConfig(t *testing.T, body string) string {
-	f, err := ioutil.TempFile(t.TempDir(), "config_test_*")
+func mkConfig(t *testing.T, directory string, body string) string {
+	f, err := ioutil.TempFile(directory, "config_test_*.yml")
 
 	if err != nil {
 		t.Fatalf("could not make temp file: %v", err)
