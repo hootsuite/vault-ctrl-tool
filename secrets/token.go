@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
-
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	zlog "github.com/rs/zerolog/log"
 )

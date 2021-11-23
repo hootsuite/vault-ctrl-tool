@@ -72,11 +72,6 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 	return log, cfg, vaultClient, nil
 }
 
-// ErrorCouldNotValidateToken returned when token has been found, but cannot be validated.
-// Used to differentiate scenarios where the caller may want to continue attempting credential
-// sync despite it being undetermined whether the token is valid.
-var ErrorCouldNotValidateToken = errors.New("could not validate vault token")
-
 // PerformSync does primary VCT syncing logic by obtaining a Vault token and checking it's validity.
 // If a token is found, but cannot be validated this will return a wrapped ErrorCouldNotValidateToken error.
 func (s *Syncer) GetVaultToken(ctx context.Context, flags util.CliFlags) (vaulttoken.VaultToken, error) {
@@ -84,7 +79,7 @@ func (s *Syncer) GetVaultToken(ctx context.Context, flags util.CliFlags) (vaultt
 
 	if err := s.checkVaultToken(vaultToken, flags); err != nil {
 		s.metrics.SidecarVaultTokenErrors.Inc()
-		return nil, fmt.Errorf("failed to check token: %w: %v", ErrorCouldNotValidateToken, err)
+		return nil, fmt.Errorf("failed to check token: %w", err)
 	}
 
 	return vaultToken, nil

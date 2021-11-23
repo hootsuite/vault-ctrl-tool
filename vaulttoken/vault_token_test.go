@@ -7,11 +7,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/util"
-
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/vault/api"
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	mock_vaultclient "github.com/hootsuite/vault-ctrl-tool/v2/vaultclient/mocks"
 	"github.com/stretchr/testify/assert"
 )

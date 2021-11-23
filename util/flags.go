@@ -155,7 +155,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 
 	// Metrics options
 	app.Flag("enable-prometheus-metrics", "enables prometheus metrics to be served on prometheus-metrics port").Default("true").BoolVar(&flags.EnablePrometheusMetrics)
-	app.Flag("prometheus-port", "specifies prometheus metrics port").Default("9192").IntVar(&flags.PrometheusPort)
+	app.Flag("prometheus-port", "specifies prometheus metrics port").Default("9191").IntVar(&flags.PrometheusPort)
 
 	// Vault client options
 	app.Flag("vault-client-timeout", "timeout duration for vault client HTTP timeouts").Default("30s").DurationVar(&flags.VaultClientTimeout)
