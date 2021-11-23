@@ -127,6 +127,7 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 
 		if err := sidecarSync(ctx, mtrcs, flags); err != nil {
 			zlog.Error().Err(err).Msg("failed initial sidecar sync")
+			mtrcs.SidecarSyncErrors.Inc()
 		}
 		renewTicker := time.NewTicker(flags.RenewInterval)
 		defer renewTicker.Stop()
