@@ -106,7 +106,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	var flags CliFlags
 
 	app := kingpin.New("vault-ctrl-tool", "A handy tool for interacting with HashiCorp Vault\n\n"+
-		"Boolean flags can be disabled through using the complement flag by adding prefixing it with 'no-' (for example: '--no-enable-prometheus-metrics")
+		"Boolean flags can be disabled through using the complement flag by adding prefixing it with 'no-' (for example: '--no-enable-prometheus-metrics).")
 
 	app.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
 	app.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
