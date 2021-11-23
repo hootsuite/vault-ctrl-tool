@@ -106,7 +106,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	var flags CliFlags
 
 	app := kingpin.New("vault-ctrl-tool", "A handy tool for interacting with HashiCorp Vault\n\n"+
-		"Boolean flags can be disabled through using the complement flag by prefixing it with 'no-' (for example: '--no-enable-prometheus-metrics).")
+		"Boolean flags can be disabled through using the complement flag by prefixing it with 'no-' (for example: '--no-token-renewable).")
 
 	app.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
 	app.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
@@ -156,7 +156,7 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	app.Flag("never-scrub", "ignored; kept for compatibility").Default("false").Bool()
 
 	// Metrics options
-	app.Flag("enable-prometheus-metrics", "enables prometheus metrics to be served on prometheus-metrics port").Default("true").BoolVar(&flags.EnablePrometheusMetrics)
+	app.Flag("enable-prometheus-metrics", "enables prometheus metrics to be served on prometheus-metrics port").Default("false").BoolVar(&flags.EnablePrometheusMetrics)
 	app.Flag("prometheus-port", "specifies prometheus metrics port").Default("9191").IntVar(&flags.PrometheusPort)
 
 	// Vault client options
