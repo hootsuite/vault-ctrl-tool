@@ -9,6 +9,7 @@ const EnableKubernetesVaultTokenAuthentication = true
 // SSHCertificate is public key, signed by Vault.
 const SSHCertificate = "id_rsa-cert.pub"
 
+// SecretLifetime is used to describe secrets lifetime description.
 type SecretLifetime string
 
 // Secrets and templates can have a lifetime associated with them, those without an explicit lifetime

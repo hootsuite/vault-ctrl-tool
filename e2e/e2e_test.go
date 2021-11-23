@@ -3,17 +3,18 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
+	"os"
+	"path"
+	"testing"
+	"time"
+
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/vault/api"
 	mtrics "github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	"github.com/stretchr/testify/assert"
-	"io/ioutil"
 	testing2 "k8s.io/utils/clock/testing"
-	"os"
-	"path"
-	"testing"
-	"time"
 )
 
 // TestSyncWithPinnedVersion ensures that when requesting a specific version of a secret in a config file cascades
@@ -53,8 +54,10 @@ secrets:
 
 	fakeClock := testing2.NewFakeClock(time.Now())
 	ctx := clock.Set(context.Background(), fakeClock)
-	err := fixture.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
 
+	vtoken, err := fixture.syncer.GetVaultToken(ctx, *fixture.cliFlags)
+	assert.NoError(t, err)
+	err = fixture.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
 	assert.NoError(t, err)
 	assert.FileExists(t, path.Join(fixture.workDir, "example-output"))
 	assert.Equal(t, 1, fixture.metrics.Counter(mtrics.SecretUpdates))
@@ -97,7 +100,10 @@ secrets:
 
 	fakeClock := testing2.NewFakeClock(time.Now())
 	ctx := clock.Set(context.Background(), fakeClock)
-	err := fixture1.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
+
+	vtoken, err := fixture1.syncer.GetVaultToken(ctx, *fixture1.cliFlags)
+	assert.NoError(t, err)
+	err = fixture1.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
 
 	assert.NoError(t, err)
 	assert.FileExists(t, path.Join(fixture1.workDir, "foo"))
@@ -124,7 +130,9 @@ secrets:
 			return response, nil
 		}).Times(1)
 
-	err = fixture2.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
+	vtoken, err = fixture2.syncer.GetVaultToken(ctx, *fixture2.cliFlags)
+	assert.NoError(t, err)
+	err = fixture2.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
 
 	assert.NoError(t, err)
 	assert.FileExists(t, path.Join(fixture2.workDir, "foo"))
@@ -178,7 +186,9 @@ secrets:
 	fakeClock := testing2.NewFakeClock(time.Date(2019, 10, 2, 22, 52, 20, 0, time.UTC))
 
 	ctx := clock.Set(context.Background(), fakeClock)
-	err := fixture1.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
+	vtoken, err := fixture1.syncer.GetVaultToken(ctx, *fixture1.cliFlags)
+	assert.NoError(t, err)
+	err = fixture1.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
 
 	assert.NoError(t, err)
 	assert.FileExists(t, path.Join(fixture1.workDir, "foo"))
@@ -209,7 +219,9 @@ secrets:
 			return response, nil
 		}).Times(1)
 
-	err = fixture2.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
+	vtoken, err = fixture2.syncer.GetVaultToken(ctx, *fixture2.cliFlags)
+	assert.NoError(t, err)
+	err = fixture2.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture1.cliFlags)
 
 	assert.NoError(t, err)
 
@@ -247,7 +259,9 @@ version: 3
 
 	fakeClock := testing2.NewFakeClock(time.Now())
 	ctx := clock.Set(context.Background(), fakeClock)
-	err := fixture.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
+	vtoken, err := fixture.syncer.GetVaultToken(ctx, *fixture.cliFlags)
+	assert.NoError(t, err)
+	err = fixture.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, fixture.metrics.Counter(mtrics.BriefcaseReset))
@@ -295,7 +309,9 @@ secrets:
 
 	fakeClock := testing2.NewFakeClock(time.Now())
 	ctx := clock.Set(context.Background(), fakeClock)
-	err := fixture.syncer.PerformSync(ctx, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
+	vtoken, err := fixture.syncer.GetVaultToken(ctx, *fixture.cliFlags)
+	assert.NoError(t, err)
+	err = fixture.syncer.PerformSync(ctx, vtoken, fakeClock.Now().AddDate(1, 0, 0), *fixture.cliFlags)
 
 	assert.NoError(t, err)
 

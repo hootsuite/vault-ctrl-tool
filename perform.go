@@ -3,18 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
-
 	"github.com/hootsuite/vault-ctrl-tool/v2/briefcase"
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"github.com/hootsuite/vault-ctrl-tool/v2/syncer"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
+	"github.com/hootsuite/vault-ctrl-tool/v2/util/clock"
 	"github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
 	zlog "github.com/rs/zerolog/log"
 )
@@ -43,7 +42,11 @@ func PerformOneShotSidecar(ctx context.Context, flags util.CliFlags) error {
 		return err
 	}
 
-	return sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags)
+	vaultToken, err := sync.GetVaultToken(ctx, flags)
+	if err != nil {
+		return fmt.Errorf("failed to get vault token: %w", err)
+	}
+	return sync.PerformSync(ctx, vaultToken, clock.Now(ctx).Add(flags.RenewInterval*2), flags)
 }
 
 func PerformInit(ctx context.Context, flags util.CliFlags) error {
@@ -70,35 +73,45 @@ func PerformInit(ctx context.Context, flags util.CliFlags) error {
 	sync, err := syncer.SetupSyncer(flags, briefcase.NewBriefcase(mtrics), mtrics)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to setup syncer: %w", err)
 	}
 
-	return sync.PerformSync(ctx, clock.Now(ctx).Add(24*time.Hour), flags)
+	vaultToken, err := sync.GetVaultToken(ctx, flags)
+	if err != nil {
+		return fmt.Errorf("failed to get vault token: %w", err)
+	}
+	return sync.PerformSync(ctx, vaultToken, clock.Now(ctx).Add(24*time.Hour), flags)
 }
 
-func sidecarSync(ctx context.Context, mtrcs *metrics.Metrics, flags util.CliFlags, c chan os.Signal) {
+func sidecarSync(ctx context.Context, mtrcs *metrics.Metrics, flags util.CliFlags) error {
 	lockHandle, err := util.LockFile(flags.BriefcaseFilename + ".lck")
 	if err != nil {
-		zlog.Error().Err(err).Msg("could not create exclusive flock")
-		c <- os.Interrupt
-		return
+		return fmt.Errorf("could not create exclusive flock: %w", err)
 	}
 	defer lockHandle.Unlock(true)
 
 	sync, err := makeSyncer(flags, mtrcs)
+
 	if err != nil {
-		zlog.Error().Err(err).Msg("could not create syncer")
-		c <- os.Interrupt
-		return
+		return fmt.Errorf("could not create syncer: %w", err)
 	}
 
-	if err := sync.PerformSync(ctx, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
-		zlog.Error().Err(err).Msg("sync failed")
-		c <- os.Interrupt
-		return
+	vaultToken, err := sync.GetVaultToken(ctx, flags)
+	if err != nil {
+		return fmt.Errorf("could not get valid token: %w", err)
 	}
+	if err := sync.PerformSync(ctx, vaultToken, clock.Now(ctx).Add(flags.RenewInterval*2), flags); err != nil {
+		return fmt.Errorf("could not peform sync: %w", err)
+	}
+
+	return nil
 }
 
+// PerformSidecar runs vault-ctrl-tool in sidecar mode. Each renew interval, it will retrieve a Vault
+// token and check if it is valid. However in the case where it cannot validate the validity of the
+// token (such in the case of a network issue with the Vault API), it will continue with checking if
+// dynamic secrets require renewal.
+// Failure to renew credentials will cause the sidecar to terminate.
 func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 
 	c := make(chan os.Signal, 1)
@@ -106,12 +119,16 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 	signal.Notify(c, syscall.SIGTERM)
 
 	mtrcs := metrics.NewMetrics()
+	// if metrics server stops running then it will initiate shutdown.
+	metrics.MetricsHandler(fmt.Sprintf(":%d", flags.PrometheusPort), c)
 
 	go func() {
 		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Str("buildVersion", buildVersion).Msg("starting")
 
-		sidecarSync(ctx, mtrcs, flags, c)
-
+		if err := sidecarSync(ctx, mtrcs, flags); err != nil {
+			zlog.Error().Err(err).Msg("failed initial sidecar sync")
+			mtrcs.SidecarSyncErrors.Inc()
+		}
 		renewTicker := time.NewTicker(flags.RenewInterval)
 		defer renewTicker.Stop()
 
@@ -122,7 +139,10 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 			select {
 			case <-renewTicker.C:
 				zlog.Info().Msg("heartbeat")
-				sidecarSync(ctx, mtrcs, flags, c)
+				if err := sidecarSync(ctx, mtrcs, flags); err != nil {
+					zlog.Error().Err(err).Msg("failed sidecar sync")
+					mtrcs.SidecarSyncErrors.Inc()
+				}
 			case <-jobCompletionTicker.C:
 				if flags.ShutdownTriggerFile != "" {
 					zlog.Debug().Str("triggerFile", flags.ShutdownTriggerFile).Msg("performing completion check against file")
@@ -152,7 +172,7 @@ func PerformCleanup(flags util.CliFlags) error {
 	} else {
 
 		if flags.RevokeOnCleanup && bc.AuthTokenLease.Token != "" {
-			vaultClient, err := vaultclient.NewVaultClient(flags.ServiceSecretPrefix)
+			vaultClient, err := vaultclient.NewVaultClient(flags.ServiceSecretPrefix, flags.VaultClientTimeout, flags.VaultClientRetries)
 			if err != nil {
 				log.Error().Err(err).Msg("could not create new vault client to revoke token")
 			} else {

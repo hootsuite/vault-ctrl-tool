@@ -9,33 +9,38 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+// CliFlags contains all flags for the vault-ctrl-tool application.
 // v1 of vault-ctrl-tool had some bad ideas about parsing command line arguments. This is kept for compatibility.
 type CliFlags struct {
-	ShowVersion            bool          // Display version and exit
-	PerformInit            bool          // run in "init" mode
-	PerformSidecar         bool          // run in "sidecar" mode
-	PerformOneShot         bool          // even though running in sidecar mode, only run things once and then exit.
-	PerformCleanup         bool          // cleanup everything in the leases file
-	RevokeOnCleanup        bool          // also revoke everything when cleaning up
-	RenewInterval          time.Duration // when in sidecar mode, this is the expected period between checks
-	BriefcaseFilename      string        // absolute location of briefcase
-	ShutdownTriggerFile    string        // if this file exists, the sidecar will shutdown
-	VaultTokenArg          string        // v-c-t will accept a vault token as a command line arg
-	EC2AuthEnabled         bool          // use "registered AMI" to authenticate an EC2 instance
-	EC2Nonce               string        // Nonce used for re-authenticating EC2 instances
-	IAMAuthRole            string        // Role to use when performing IAM authentication of EC2 instances
-	IAMVaultAuthBackend    string        // Override IAM auth path in Vault
-	ConfigFile             string        // location of vault-config, either relative to input prefix, or absolute
-	OutputPrefix           string        // prefix to use when writing output files
-	InputPrefix            string        // prefix to use when looking for input files
-	ServiceSecretPrefix    string        // override prefix for relative KV secrets
-	KubernetesLoginPath    string        // path to use in Vault for Kubernetes authentication
-	ServiceAccountToken    string        // path to the ServiceAccount token file for Kubernetes authentication
-	KubernetesAuthRole     string        // enables Kubernetes auth, and sets role to use with Kubernetes authentication
-	DebugLogLevel          bool          // enable debug logging
-	CliVaultTokenRenewable bool          // is the vault token supplied on the command line renewable?
-	ForceRefreshTTL        time.Duration // secrets will be refreshed after this duration, regardless of their expiry.
-	STSTTL                 time.Duration // configures what TTL to use for AWS STS tokens.
+	ShowVersion             bool          // Display version and exit
+	PerformInit             bool          // run in "init" mode
+	PerformSidecar          bool          // run in "sidecar" mode
+	PerformOneShot          bool          // even though running in sidecar mode, only run things once and then exit.
+	PerformCleanup          bool          // cleanup everything in the leases file
+	RevokeOnCleanup         bool          // also revoke everything when cleaning up
+	RenewInterval           time.Duration // when in sidecar mode, this is the expected period between checks
+	BriefcaseFilename       string        // absolute location of briefcase
+	ShutdownTriggerFile     string        // if this file exists, the sidecar will shutdown
+	VaultTokenArg           string        // v-c-t will accept a vault token as a command line arg
+	EC2AuthEnabled          bool          // use "registered AMI" to authenticate an EC2 instance
+	EC2Nonce                string        // Nonce used for re-authenticating EC2 instances
+	IAMAuthRole             string        // Role to use when performing IAM authentication of EC2 instances
+	IAMVaultAuthBackend     string        // Override IAM auth path in Vault
+	ConfigFile              string        // location of vault-config, either relative to input prefix, or absolute
+	OutputPrefix            string        // prefix to use when writing output files
+	InputPrefix             string        // prefix to use when looking for input files
+	ServiceSecretPrefix     string        // override prefix for relative KV secrets
+	KubernetesLoginPath     string        // path to use in Vault for Kubernetes authentication
+	ServiceAccountToken     string        // path to the ServiceAccount token file for Kubernetes authentication
+	KubernetesAuthRole      string        // enables Kubernetes auth, and sets role to use with Kubernetes authentication
+	DebugLogLevel           bool          // enable debug logging
+	CliVaultTokenRenewable  bool          // is the vault token supplied on the command line renewable?
+	ForceRefreshTTL         time.Duration // secrets will be refreshed after this duration, regardless of their expiry.
+	STSTTL                  time.Duration // configures what TTL to use for AWS STS tokens.
+	EnablePrometheusMetrics bool          // configures whether to enable prometheus metrics server for sidecar mode.
+	PrometheusPort          int           // configures port on which to serve prometheus metrics endpoint
+	VaultClientTimeout      time.Duration // configures HTTP timeouts for Vault client connections.
+	VaultClientRetries      int           // configures HTTP retries for Vault client connections.
 }
 
 type RunMode int
@@ -147,6 +152,14 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	// Flags for smoothing out edge cases.
 	app.Flag("ignore-non-renewable-auth", "ignored; kept for compatibility").Default("false").Bool()
 	app.Flag("never-scrub", "ignored; kept for compatibility").Default("false").Bool()
+
+	// Metrics options
+	app.Flag("enable-prometheus-metrics", "enables prometheus metrics to be served on prometheus-metrics port").Default("true").BoolVar(&flags.EnablePrometheusMetrics)
+	app.Flag("prometheus-port", "specifies prometheus metrics port").Default("9191").IntVar(&flags.PrometheusPort)
+
+	// Vault client options
+	app.Flag("vault-client-timeout", "timeout duration for vault client HTTP timeouts").Default("30s").DurationVar(&flags.VaultClientTimeout)
+	app.Flag("vault-client-retries", "number of retries to be performed for vault client operations").Default("2").IntVar(&flags.VaultClientRetries)
 
 	_, err := app.Parse(args)
 	if err != nil {

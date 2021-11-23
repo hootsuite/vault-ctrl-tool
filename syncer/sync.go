@@ -21,9 +21,10 @@ import (
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"github.com/hootsuite/vault-ctrl-tool/v2/vaultclient"
 	"github.com/rs/zerolog"
-	zlog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/log"
 )
 
+// Syncer performs Vault secrets synchronizations.
 type Syncer struct {
 	log         zerolog.Logger
 	config      *config.ControlToolConfig
@@ -55,14 +56,14 @@ func SetupSyncer(flags util.CliFlags, bc *briefcase.Briefcase, m *metrics.Metric
 
 func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.ControlToolConfig, vaultclient.VaultClient, error) {
 
-	log := zlog.With().Str("cfg", flags.ConfigFile).Logger()
+	log := log.With().Str("cfg", flags.ConfigFile).Logger()
 
 	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
 	if err != nil {
 		return log, nil, nil, err
 	}
 
-	vaultClient, err := vaultclient.NewVaultClient(flags.ServiceSecretPrefix)
+	vaultClient, err := vaultclient.NewVaultClient(flags.ServiceSecretPrefix, flags.VaultClientTimeout, flags.VaultClientRetries)
 	if err != nil {
 		log.Error().Err(err).Msg("could not create vault client")
 		return log, nil, nil, err
@@ -71,13 +72,21 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 	return log, cfg, vaultClient, nil
 }
 
-// PerformSync does primary VCT syncing logic by obtaining a Vault token and refreshing AWS credentials.
-func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util.CliFlags) error {
-	vaultToken, err := s.obtainVaultToken(flags)
-	if err != nil {
-		return err
+// PerformSync does primary VCT syncing logic by obtaining a Vault token and checking it's validity.
+// If a token is found, but cannot be validated this will return a wrapped ErrorCouldNotValidateToken error.
+func (s *Syncer) GetVaultToken(ctx context.Context, flags util.CliFlags) (vaulttoken.VaultToken, error) {
+	vaultToken := s.obtainVaultToken(flags)
+
+	if err := s.checkVaultToken(vaultToken, flags); err != nil {
+		s.metrics.SidecarVaultTokenErrors.Inc()
+		return nil, fmt.Errorf("failed to check token: %w", err)
 	}
 
+	return vaultToken, nil
+}
+
+// PerformSync does primary VCT syncing logic by obtaining a refreshing dynamic credentials.
+func (s *Syncer) PerformSync(ctx context.Context, vaultToken vaulttoken.VaultToken, nextSync time.Time, flags util.CliFlags) error {
 	s.vaultClient.SetToken(vaultToken.TokenID())
 
 	// First we compare the vault token we're using with the one in the briefcase. If it's different, then
@@ -88,12 +97,11 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 		s.briefcase = s.briefcase.ResetBriefcase()
 		if s.config.VaultConfig.VaultToken.Output != "" {
 			if err := secrets.WriteVaultToken(s.metrics, s.config.VaultConfig.VaultToken, vaultToken.TokenID()); err != nil {
-				s.log.Error().Err(err).Msg("could not write vault token")
-				return err
+				return fmt.Errorf("could not write vault token: %w", err)
 			}
 		}
 		if err := s.briefcase.EnrollVaultToken(ctx, vaultToken.Wrapped()); err != nil {
-			s.log.Error().Err(err).Msg("could not enroll vault token into briefcase")
+			return fmt.Errorf("could not enroll vault token into briefcase: %w", err)
 		}
 	}
 
@@ -101,26 +109,26 @@ func (s *Syncer) PerformSync(ctx context.Context, nextSync time.Time, flags util
 		s.log.Debug().Msg("refreshing vault token against server")
 		secret, err := s.vaultClient.RefreshVaultToken()
 		if err != nil {
-			s.log.Error().Err(err).Msg("could not refresh vault token")
-			return err
+			s.metrics.SidecarSyncErrors.Inc()
+			return fmt.Errorf("could not refresh vault token: %w", err)
 		}
 		s.metrics.Increment(metrics.VaultTokenRefreshed)
 
 		if err := s.briefcase.EnrollVaultToken(ctx, util.NewWrappedToken(secret, s.briefcase.AuthTokenLease.Renewable)); err != nil {
-			return err
+			s.metrics.SidecarSyncErrors.Inc()
+			return fmt.Errorf("could not enroll refreshed vault token into briefcase: %w", err)
 		}
 	}
 
-	err = s.compareConfigToBriefcase(ctx, nextSync, flags.STSTTL, flags.ForceRefreshTTL)
+	err := s.compareConfigToBriefcase(ctx, nextSync, flags.STSTTL, flags.ForceRefreshTTL)
 	if err != nil {
-		s.log.Error().Err(err).Msg("could not compare config file against briefcase")
-		return err
+		s.metrics.SidecarSyncErrors.Inc()
+		return fmt.Errorf("could not compare config against briefcase: %w", err)
 	}
 
 	err = s.briefcase.SaveAs(flags.BriefcaseFilename)
 	if err != nil {
-		s.log.Error().Err(err).Str("filename", flags.BriefcaseFilename).Msg("could not save briefcase")
-		return err
+		return fmt.Errorf("could not save briefcase as '%s': %w", flags.BriefcaseFilename, err)
 	}
 	return nil
 }
@@ -180,14 +188,17 @@ func (s *Syncer) compareConfigToBriefcase(ctx context.Context, nextSync time.Tim
 // and environment variables to try to find a workable vault token. This function will build an "authenticator"
 // whose job it is to authenticate against Vault using whatever material is specified and come up with a new
 // vault token if needed.
-func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, error) {
+func (s *Syncer) obtainVaultToken(flags util.CliFlags) vaulttoken.VaultToken {
 
 	log := s.log.With().Str("vaultAddr", s.vaultClient.Address()).Logger()
 
 	log.Info().Msg("obtaining vault token")
 
 	token := vaulttoken.NewVaultToken(s.briefcase, s.vaultClient, flags.VaultTokenArg, flags.CliVaultTokenRenewable)
+	return token
+}
 
+func (s *Syncer) checkVaultToken(token vaulttoken.VaultToken, flags util.CliFlags) error {
 	if err := token.CheckAndRefresh(); err != nil {
 		if errors.Is(err, vaulttoken.ErrNoValidVaultTokenAvailable) {
 			log.Debug().Err(err).Msg("no vault token already available, performing authentication")
@@ -195,19 +206,19 @@ func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, e
 			authenticator, err := vaultclient.NewAuthenticator(s.vaultClient, flags)
 			if err != nil {
 				log.Error().Err(err).Msg("unable to create authenticator")
-				return nil, err
+				return err
 			}
 			log.Debug().Str("authenticator", fmt.Sprintf("%+v", authenticator)).Msg("authenticator created")
 			secret, err := authenticator.Authenticate()
 			if err != nil {
 				log.Error().Err(err).Msg("authentication failed")
-				return nil, err
+				return err
 			}
 
 			accessor, err := secret.TokenAccessor()
 			if err != nil {
 				log.Error().Err(err).Msg("could not get accessor of new vault token")
-				return nil, err
+				return err
 			}
 
 			log.Info().Str("accessor", accessor).Msg("authentication successful")
@@ -215,17 +226,17 @@ func (s *Syncer) obtainVaultToken(flags util.CliFlags) (vaulttoken.VaultToken, e
 			err = token.Set(secret)
 			if err != nil {
 				log.Error().Err(err).Msg("could not store vault token")
-				return nil, err
+				return err
 			}
 		} else {
 			log.Error().Err(err).Msg("could not establish vault token")
-			return nil, err
+			return err
 		}
 	}
 
 	log.Info().Str("accessor", token.Accessor()).Msg("using valid token")
 
-	return token, nil
+	return nil
 }
 
 // cacheSecrets has the job of fetching secrets from Vault, if they're needed. The need is based on a few things, but
