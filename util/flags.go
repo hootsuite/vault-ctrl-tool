@@ -41,6 +41,7 @@ type CliFlags struct {
 	PrometheusPort          int           // configures port on which to serve prometheus metrics endpoint
 	VaultClientTimeout      time.Duration // configures HTTP timeouts for Vault client connections.
 	VaultClientRetries      int           // configures HTTP retries for Vault client connections.
+	TerminateOnSyncFailure  bool          // If enabled in sidecar mode, will cause tool to terminate if there is a failure to perform sync.
 }
 
 type RunMode int
@@ -160,6 +161,9 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	// Vault client options
 	app.Flag("vault-client-timeout", "timeout duration for vault client HTTP timeouts").Default("30s").DurationVar(&flags.VaultClientTimeout)
 	app.Flag("vault-client-retries", "number of retries to be performed for vault client operations").Default("2").IntVar(&flags.VaultClientRetries)
+
+	// Sidecar mode options
+	app.Flag("terminate-on-sync-failure", "if enabled in sidecar mode, will cause tool to terminate if there is a failure to perform sync").Default("true").BoolVar(&flags.TerminateOnSyncFailure)
 
 	_, err := app.Parse(args)
 	if err != nil {
