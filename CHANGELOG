@@ -1,8 +1,9 @@
 v1.3.0: 22-Nov-2021
  * Errors during sync loop while running sidecar mode will no longer terminate vault-ctrl-tool.
  * Sidecar mode now can run a Prometheus metrics endpoint which emits metrics about sidecar syncs.
+   Prometheus can be toggled with "--enable-prometheus-metrics" and have its port overridden by "--prometheus-port".
  * Added better documentation and some refactoring and cleanup of internal libraries. 
- * Vault client HTTP timeout and maxRetries are now configurable using "vault-client-timeout" and "vault-client-retries" flags.
+ * Vault client HTTP timeout and maxRetries are now configurable using "--vault-client-timeout" and "--vault-client-retries" flags.
    Note: These now default to 30s and 2, respectively. Compared to previous version of vault-ctrl-tool which where 60s, 2.
 
 v1.2.0: 26-May-2021
