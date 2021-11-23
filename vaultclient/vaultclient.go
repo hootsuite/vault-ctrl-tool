@@ -43,7 +43,7 @@ func NewVaultClient(secretsPrefix string, clientTimeout time.Duration, clientRet
 
 	zlog.Debug().
 		Int("vaultClientMaxRetries", clientRetries).
-		Int("vaultClientTimeoutSeconds", int(clientTimeout)).
+		Int("vaultClientTimeoutSeconds", int(clientTimeout.Seconds())).
 		Str("secretsPrefix", secretsPrefix).
 		Msg("creating Vault client")
 
