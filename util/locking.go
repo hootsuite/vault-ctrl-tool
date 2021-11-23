@@ -3,10 +3,11 @@ package util
 import (
 	"errors"
 	"fmt"
-	zlog "github.com/rs/zerolog/log"
 	"os"
 	"path/filepath"
 	"syscall"
+
+	zlog "github.com/rs/zerolog/log"
 )
 
 type LockHandle struct {

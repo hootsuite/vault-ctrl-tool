@@ -1,6 +1,7 @@
 package vaultclient
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/hashicorp/vault/api"
@@ -33,11 +34,22 @@ type wrappedVaultClient struct {
 	log           zerolog.Logger
 }
 
-func NewVaultClient(secretsPrefix string) (VaultClient, error) {
+// NewVaultClient constructs a new VaultClient implementation.
+func NewVaultClient(secretsPrefix string, clientTimeout time.Duration, clientRetries int) (VaultClient, error) {
+	conf := api.DefaultConfig()
+	// Requests are twice with a jitter backoff.
+	conf.MaxRetries = clientRetries
+	conf.Timeout = clientTimeout
 
-	client, err := api.NewClient(api.DefaultConfig())
+	zlog.Debug().
+		Int("vaultClientMaxRetries", clientRetries).
+		Int("vaultClientTimeoutSeconds", int(clientTimeout)).
+		Str("secretsPrefix", secretsPrefix).
+		Msg("creating Vault client")
+
+	client, err := api.NewClient(conf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not create Vault client: %w", err)
 	}
 
 	log := zlog.With().Str("vaultAddr", client.Address()).Logger()

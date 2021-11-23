@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 	"os"
 	"testing"
+
+	"github.com/hootsuite/vault-ctrl-tool/v2/util"
 
 	"github.com/golang/mock/gomock"
 	"github.com/hashicorp/vault/api"

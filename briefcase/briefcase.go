@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"time"
 
@@ -111,13 +112,13 @@ func LoadBriefcase(filename string, mtrics *metrics.Metrics) (*Briefcase, error)
 	zlog.Info().Str("filename", filename).Msg("reading briefcase")
 	bytes, err := ioutil.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not read briefcase data: %w", err)
 	}
 
 	bc := NewBriefcase(mtrics)
 	err = json.Unmarshal(bytes, bc)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not parse briefcase data: %w", err)
 	}
 
 	return bc, nil

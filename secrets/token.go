@@ -2,8 +2,9 @@ package secrets
 
 import (
 	"fmt"
-	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 	"os"
+
+	"github.com/hootsuite/vault-ctrl-tool/v2/metrics"
 
 	"github.com/hootsuite/vault-ctrl-tool/v2/config"
 	"github.com/hootsuite/vault-ctrl-tool/v2/util"

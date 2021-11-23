@@ -16,6 +16,8 @@ import (
 
 var ErrNoValidVaultTokenAvailable = errors.New("no currently valid valid token")
 
+// VaultToken contains actions used for checking Vault tokens and accessing underlying
+// fields.
 type VaultToken interface {
 	CheckAndRefresh() error
 	Set(token *util.WrappedToken) error
@@ -24,6 +26,7 @@ type VaultToken interface {
 	Secret() *api.Secret
 	Wrapped() *util.WrappedToken
 }
+
 type vaultTokenManager struct {
 	log        zerolog.Logger
 	validToken *util.WrappedToken
@@ -37,6 +40,7 @@ type vaultTokenManager struct {
 	tokenRenewableCliArg bool
 }
 
+// NewVaultToken constructs an implementation of VaultToken which uses provided parameters.
 func NewVaultToken(briefcase *briefcase.Briefcase, vaultClient vaultclient.VaultClient, vaultTokenCliArg string, tokenRenewableCliArg bool) VaultToken {
 	log := zlog.With().Str("vaultAddr", vaultClient.Address()).Logger()
 
@@ -49,22 +53,27 @@ func NewVaultToken(briefcase *briefcase.Briefcase, vaultClient vaultclient.Vault
 	}
 }
 
+// Secret returns the underlying token secret.
 func (vt *vaultTokenManager) Secret() *api.Secret {
 	return vt.validToken.Secret
 }
 
+// Wrapped returns the wrapped token.
 func (vt *vaultTokenManager) Wrapped() *util.WrappedToken {
 	return vt.validToken
 }
 
+// Accessor returns the underlying token accessor.
 func (vt *vaultTokenManager) Accessor() string {
 	return vt.accessor
 }
 
+// TokenID returns the underlying token ID.
 func (vt *vaultTokenManager) TokenID() string {
 	return vt.tokenID
 }
 
+// Set sets a VaultTokens token using a wrapped token.
 func (vt *vaultTokenManager) Set(authToken *util.WrappedToken) error {
 
 	token, err := authToken.TokenID()
