@@ -1,6 +1,6 @@
 module github.com/hootsuite/vault-ctrl-tool/v2
 
-go 1.15
+go 1.17
 
 require (
 	github.com/aws/aws-sdk-go v1.35.25
