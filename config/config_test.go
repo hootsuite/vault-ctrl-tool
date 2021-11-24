@@ -3,6 +3,8 @@ package config
 import (
 	"io/ioutil"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var validConfigs = map[string]string{
@@ -90,31 +92,22 @@ func TestInvalidConfigs(t *testing.T) {
 func TestConfigDir(t *testing.T) {
 
 	dir := t.TempDir()
-	f := mkConfig(t, dir, validSubConfig["sub config1"])
-	t.Log(f)
-	f = mkConfig(t, dir, validSubConfig["sub config2"])
-	t.Log(f)
+	for configName, configData := range validSubConfig {
+		f := mkConfig(t, dir, configData)
+		t.Logf("created config for: %s : %s", configName, f)
+	}
 	emptyConfig := mkConfig(t, dir, "")
 	config, err := ReadConfigFile(emptyConfig, dir, "", "")
 	if err != nil {
 		t.Log("this config must be okay, got error")
 		t.Fail()
 	}
-	// check if key == test exists
-	// check if key == test2 exists
-	foundKey1 := false
-	foundKey2 := false
-	for _, secret := range config.VaultConfig.Secrets {
-		if secret.Key == "test" {
-			foundKey1 = true
-		}
-		if secret.Key == "test2" {
-			foundKey2 = true
-		}
-	}
-	if !foundKey1 || !foundKey2 {
-		t.Fatal("failed to find keys in config directory")
-	}
+
+	key := SecretType{Key: "test", Path: "/secret/test", Lifetime: "static"}
+	assert.Contains(t, config.VaultConfig.Secrets, key)
+
+	key2 := SecretType{Key: "test2", Path: "/secret/test2", Lifetime: "static"}
+	assert.Contains(t, config.VaultConfig.Secrets, key2)
 }
 
 func mkConfig(t *testing.T, directory string, body string) string {
