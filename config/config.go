@@ -174,35 +174,40 @@ func ReadConfigFile(configFile string, configDir string, inputPrefix, outputPref
 		return nil, fmt.Errorf("could not parse config file %q: %w", absConfigFile, err)
 	}
 
-	items, err := ioutil.ReadDir(util.AbsolutePath(inputPrefix, configDir))
-	if err != nil {
-		log.Error().Err(err).Msg("Error reading directory")
-		return nil, fmt.Errorf("could not read config directory %q: %w", configDir, err)
-	}
-	for _, item := range items {
-		fileExtension := filepath.Ext(item.Name())
-		if (fileExtension == ".yaml" || fileExtension == ".yml") && !item.IsDir() {
+	_, err := os.Stat(util.AbsolutePath(inputPrefix, configDir))
+	if os.IsNotExist(err) {
+		log.Debug().Msg("config directory doesn't exist")
+	} else {
+		items, err := ioutil.ReadDir(util.AbsolutePath(inputPrefix, configDir))
+		if err != nil {
+			log.Error().Err(err).Msg("Error reading directory")
+			return nil, fmt.Errorf("could not read config directory %q: %w", configDir, err)
+		}
+		for _, item := range items {
+			fileExtension := filepath.Ext(item.Name())
+			if (fileExtension == ".yaml" || fileExtension == ".yml") && !item.IsDir() {
 
-			currentConfigFile := util.AbsolutePath(inputPrefix, configDir) + "/" + item.Name()
-			log.Debug().Msg("reading config file " + currentConfigFile)
-			yamlFile, err := ioutil.ReadFile(currentConfigFile)
-			if err != nil {
-				log.Error().Err(err).Msg("could not read config file")
-				return nil, fmt.Errorf("trouble reading config file %q: %w", currentConfigFile, err)
-			}
+				currentConfigFile := util.AbsolutePath(inputPrefix, configDir) + "/" + item.Name()
+				log.Debug().Msg("reading config file " + currentConfigFile)
+				yamlFile, err := ioutil.ReadFile(currentConfigFile)
+				if err != nil {
+					log.Error().Err(err).Msg("could not read config file")
+					return nil, fmt.Errorf("trouble reading config file %q: %w", currentConfigFile, err)
+				}
 
-			currentConfig, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
-			config.VaultConfig.Secrets = append(config.VaultConfig.Secrets, currentConfig.VaultConfig.Secrets...)
-			config.VaultConfig.Templates = append(config.VaultConfig.Templates, currentConfig.VaultConfig.Templates...)
-			config.VaultConfig.SSHCertificates = append(config.VaultConfig.SSHCertificates, currentConfig.VaultConfig.SSHCertificates...)
-			config.VaultConfig.AWS = append(config.VaultConfig.AWS, currentConfig.VaultConfig.AWS...)
-			for k, v := range currentConfig.Templates {
-				config.Templates[k] = v
-			}
-			for k, v := range currentConfig.Composites {
-				config.Composites[k] = v
-			}
+				currentConfig, err := ReadConfig(log, yamlFile, inputPrefix, outputPrefix)
+				config.VaultConfig.Secrets = append(config.VaultConfig.Secrets, currentConfig.VaultConfig.Secrets...)
+				config.VaultConfig.Templates = append(config.VaultConfig.Templates, currentConfig.VaultConfig.Templates...)
+				config.VaultConfig.SSHCertificates = append(config.VaultConfig.SSHCertificates, currentConfig.VaultConfig.SSHCertificates...)
+				config.VaultConfig.AWS = append(config.VaultConfig.AWS, currentConfig.VaultConfig.AWS...)
+				for k, v := range currentConfig.Templates {
+					config.Templates[k] = v
+				}
+				for k, v := range currentConfig.Composites {
+					config.Composites[k] = v
+				}
 
+			}
 		}
 	}
 
