@@ -126,8 +126,13 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 		zlog.Info().Str("renewInterval", flags.RenewInterval.String()).Str("buildVersion", buildVersion).Msg("starting")
 
 		if err := sidecarSync(ctx, mtrcs, flags); err != nil {
-			zlog.Error().Err(err).Msg("failed initial sidecar sync")
-			mtrcs.SidecarSyncErrors.Inc()
+			if flags.TerminateOnSyncFailure {
+				zlog.Error().Err(err).Msg("failed initial sidecar sync, terminating")
+				c <- os.Interrupt
+			} else {
+				zlog.Error().Err(err).Msg("failed initial sidecar sync")
+				mtrcs.SidecarSyncErrors.Inc()
+			}
 		}
 		renewTicker := time.NewTicker(flags.RenewInterval)
 		defer renewTicker.Stop()
@@ -140,8 +145,14 @@ func PerformSidecar(ctx context.Context, flags util.CliFlags) error {
 			case <-renewTicker.C:
 				zlog.Info().Msg("heartbeat")
 				if err := sidecarSync(ctx, mtrcs, flags); err != nil {
-					zlog.Error().Err(err).Msg("failed sidecar sync")
 					mtrcs.SidecarSyncErrors.Inc()
+					if flags.TerminateOnSyncFailure {
+						zlog.Error().Err(err).Msg("failed sidecar sync, terminating")
+						c <- os.Interrupt
+					} else {
+						zlog.Error().Err(err).Msg("failed sidecar sync")
+						mtrcs.SidecarSyncErrors.Inc()
+					}
 				}
 			case <-jobCompletionTicker.C:
 				if flags.ShutdownTriggerFile != "" {

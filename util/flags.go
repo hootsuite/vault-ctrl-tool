@@ -41,6 +41,7 @@ type CliFlags struct {
 	PrometheusPort          int           // configures port on which to serve prometheus metrics endpoint
 	VaultClientTimeout      time.Duration // configures HTTP timeouts for Vault client connections.
 	VaultClientRetries      int           // configures HTTP retries for Vault client connections.
+	TerminateOnSyncFailure  bool          // If enabled in sidecar mode, will cause tool to terminate if there is a failure to perform sync.
 }
 
 type RunMode int
@@ -104,7 +105,8 @@ func (f *CliFlags) RunMode() RunMode {
 func ProcessFlags(args []string) (*CliFlags, error) {
 	var flags CliFlags
 
-	app := kingpin.New("vault-ctrl-tool", "A handy tool for interacting with HashiCorp Vault")
+	app := kingpin.New("vault-ctrl-tool", "A handy tool for interacting with HashiCorp Vault\n\n"+
+		"Boolean flags can be disabled through using the complement flag by prefixing it with 'no-' (for example: '--no-token-renewable).")
 
 	app.Flag("init", "Run in init mode, process templates and exit.").Default("false").BoolVar(&flags.PerformInit)
 	app.Flag("config", "Full path of the config file to read.").Default("vault-config.yml").StringVar(&flags.ConfigFile)
@@ -154,12 +156,15 @@ func ProcessFlags(args []string) (*CliFlags, error) {
 	app.Flag("never-scrub", "ignored; kept for compatibility").Default("false").Bool()
 
 	// Metrics options
-	app.Flag("enable-prometheus-metrics", "enables prometheus metrics to be served on prometheus-metrics port").Default("true").BoolVar(&flags.EnablePrometheusMetrics)
+	app.Flag("enable-prometheus-metrics", "enables prometheus metrics to be served on prometheus-metrics port").Default("false").BoolVar(&flags.EnablePrometheusMetrics)
 	app.Flag("prometheus-port", "specifies prometheus metrics port").Default("9191").IntVar(&flags.PrometheusPort)
 
 	// Vault client options
 	app.Flag("vault-client-timeout", "timeout duration for vault client HTTP timeouts").Default("30s").DurationVar(&flags.VaultClientTimeout)
 	app.Flag("vault-client-retries", "number of retries to be performed for vault client operations").Default("2").IntVar(&flags.VaultClientRetries)
+
+	// Sidecar mode options
+	app.Flag("terminate-on-sync-failure", "if enabled in sidecar mode, will cause tool to terminate if there is a failure to perform sync").Default("true").BoolVar(&flags.TerminateOnSyncFailure)
 
 	_, err := app.Parse(args)
 	if err != nil {
