@@ -174,7 +174,7 @@ func ReadConfigFile(configFile string, configDir string, inputPrefix, outputPref
 		return nil, fmt.Errorf("could not parse config file %q: %w", absConfigFile, err)
 	}
 
-	_, err := os.Stat(util.AbsolutePath(inputPrefix, configDir))
+	_, err = os.Stat(util.AbsolutePath(inputPrefix, configDir))
 	if os.IsNotExist(err) {
 		zlog.Error().Err(err).Msg("config directory doesn't exist")
 
