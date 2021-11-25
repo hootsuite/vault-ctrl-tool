@@ -176,7 +176,8 @@ func ReadConfigFile(configFile string, configDir string, inputPrefix, outputPref
 
 	_, err := os.Stat(util.AbsolutePath(inputPrefix, configDir))
 	if os.IsNotExist(err) {
-		log.Debug().Msg("config directory doesn't exist")
+		zlog.Error().Err(err).Msg("config directory doesn't exist")
+
 	} else {
 		items, err := ioutil.ReadDir(util.AbsolutePath(inputPrefix, configDir))
 		if err != nil {
