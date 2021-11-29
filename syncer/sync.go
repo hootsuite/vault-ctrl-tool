@@ -58,7 +58,7 @@ func configureSyncerDependencies(flags util.CliFlags) (zerolog.Logger, *config.C
 
 	log := log.With().Str("cfg", flags.ConfigFile).Logger()
 
-	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.InputPrefix, flags.OutputPrefix)
+	cfg, err := config.ReadConfigFile(flags.ConfigFile, flags.ConfigDir, flags.InputPrefix, flags.OutputPrefix)
 	if err != nil {
 		return log, nil, nil, err
 	}

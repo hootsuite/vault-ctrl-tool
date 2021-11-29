@@ -3,6 +3,8 @@ package config
 import (
 	"io/ioutil"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var validConfigs = map[string]string{
@@ -47,11 +49,27 @@ secrets:
 `,
 }
 
+var validSubConfig = map[string]string{
+	"sub config1": `---
+version: 3
+secrets:
+ - key: test
+   path: /secret/test
+   lifetime: static`,
+	"sub config2": `---
+version: 3
+secrets:
+ - key: test2
+   path: /secret/test2
+   lifetime: static
+`,
+}
+
 func TestValidConfigs(t *testing.T) {
 	for k, v := range validConfigs {
 		t.Run(k, func(t *testing.T) {
-			filename := mkConfig(t, v)
-			_, err := ReadConfigFile(filename, "", "")
+			filename := mkConfig(t, t.TempDir(), v)
+			_, err := ReadConfigFile(filename, "", "", "")
 			if err != nil {
 				t.Fatalf("this config must be okay, got error: %v", err)
 			}
@@ -62,8 +80,8 @@ func TestValidConfigs(t *testing.T) {
 func TestInvalidConfigs(t *testing.T) {
 	for k, v := range invalidConfigs {
 		t.Run(k, func(t *testing.T) {
-			filename := mkConfig(t, v)
-			_, err := ReadConfigFile(filename, "", "")
+			filename := mkConfig(t, t.TempDir(), v)
+			_, err := ReadConfigFile(filename, "", "", "")
 			if err == nil {
 				t.Fatal("this config must generate an error")
 			}
@@ -71,8 +89,29 @@ func TestInvalidConfigs(t *testing.T) {
 	}
 }
 
-func mkConfig(t *testing.T, body string) string {
-	f, err := ioutil.TempFile(t.TempDir(), "config_test_*")
+func TestConfigDir(t *testing.T) {
+
+	dir := t.TempDir()
+	for configName, configData := range validSubConfig {
+		f := mkConfig(t, dir, configData)
+		t.Logf("created config for: %s : %s", configName, f)
+	}
+	emptyConfig := mkConfig(t, dir, "")
+	config, err := ReadConfigFile(emptyConfig, dir, "", "")
+	if err != nil {
+		t.Log("this config must be okay, got error")
+		t.Fail()
+	}
+
+	key := SecretType{Key: "test", Path: "/secret/test", Lifetime: "static"}
+	assert.Contains(t, config.VaultConfig.Secrets, key)
+
+	key2 := SecretType{Key: "test2", Path: "/secret/test2", Lifetime: "static"}
+	assert.Contains(t, config.VaultConfig.Secrets, key2)
+}
+
+func mkConfig(t *testing.T, directory string, body string) string {
+	f, err := ioutil.TempFile(directory, "config_test_*.yml")
 
 	if err != nil {
 		t.Fatalf("could not make temp file: %v", err)
