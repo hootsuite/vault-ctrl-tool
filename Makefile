@@ -1,7 +1,7 @@
 CURRENTOS := $(shell go env GOOS)
 CURRENTARCH := $(shell go env GOARCH)
 COMMIT := $(shell git rev-parse --short HEAD)
-VERSION := v1.3.1
+VERSION := v1.3.3
 LDFLAGS="-X main.buildVersion=$(VERSION) -X main.commitVersion=$(COMMIT)"
 
 .DEFAULT_GOAL := build
