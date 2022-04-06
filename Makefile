@@ -23,6 +23,7 @@ darwin-binary: mocks ## Build a macOS binary
 
 linux-binary: mocks ## Build a Linux (amd64) binary
 	GOOS=linux GOARCH=amd64 go build -trimpath -ldflags $(LDFLAGS) -o bin/vault-ctrl-tool.linux.amd64 .
+	GOOS=linux GOARCH=arm64 go build -trimpath -ldflags $(LDFLAGS) -o bin/vault-ctrl-tool.linux.arm64 .
 
 # Useful when doing development
 copy-binary:
