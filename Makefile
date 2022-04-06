@@ -1,7 +1,7 @@
 CURRENTOS := $(shell go env GOOS)
 CURRENTARCH := $(shell go env GOARCH)
 COMMIT := $(shell git rev-parse --short HEAD)
-VERSION := v1.3.3
+VERSION := v1.3.4
 LDFLAGS="-X main.buildVersion=$(VERSION) -X main.commitVersion=$(COMMIT)"
 
 .DEFAULT_GOAL := build
@@ -23,6 +23,7 @@ darwin-binary: mocks ## Build a macOS binary
 
 linux-binary: mocks ## Build a Linux (amd64) binary
 	GOOS=linux GOARCH=amd64 go build -trimpath -ldflags $(LDFLAGS) -o bin/vault-ctrl-tool.linux.amd64 .
+	GOOS=linux GOARCH=arm64 go build -trimpath -ldflags $(LDFLAGS) -o bin/vault-ctrl-tool.linux.arm64 .
 
 # Useful when doing development
 copy-binary:
